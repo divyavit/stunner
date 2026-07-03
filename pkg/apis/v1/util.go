@@ -52,79 +52,160 @@ func (a AuthType) String() string {
 	}
 }
 
-// ListenerProtocol specifies the network protocol for a listener.
-type ListenerProtocol int
+// Protocol specifies a network protocol. A single enum lists every protocol STUNner understands;
+// which subset is valid in a given context (listener, cluster, ...) is enforced at the use site, not
+// by this type. Parse a protocol name with NewProtocol; check context validity with the
+// IsListenerProtocol/IsClusterProtocol predicates.
+type Protocol int
 
 const (
-	ListenerProtocolUnknown ListenerProtocol = iota
-	ListenerProtocolUDP
-	ListenerProtocolTCP
-	ListenerProtocolTLS
-	ListenerProtocolDTLS
-	ListenerProtocolTURNUDP
-	ListenerProtocolTURNTCP
-	ListenerProtocolTURNTLS
-	ListenerProtocolTURNDTLS
+	ProtocolUnknown Protocol = iota
+	ProtocolUDP
+	ProtocolTCP
+	ProtocolTLS
+	ProtocolDTLS
+	ProtocolTURNUDP
+	ProtocolTURNTCP
+	ProtocolTURNTLS
+	ProtocolTURNDTLS
+	ProtocolUDP4
+	ProtocolTCP4
+	ProtocolUNIX
+	ProtocolUNIXGRAM
+	ProtocolUNIXPACKET
+	ProtocolIP
+	ProtocolIP4
+	ProtocolFILE
 )
 
 const (
-	listenerProtocolUDPStr      = "UDP"
-	listenerProtocolTCPStr      = "TCP"
-	listenerProtocolTLSStr      = "TLS"
-	listenerProtocolDTLSStr     = "DTLS"
-	listenerProtocolTURNUDPStr  = "TURN-UDP"
-	listenerProtocolTURNTCPStr  = "TURN-TCP"
-	listenerProtocolTURNTLSStr  = "TURN-TLS"
-	listenerProtocolTURNDTLSStr = "TURN-DTLS"
+	protocolUDPStr        = "UDP"
+	protocolTCPStr        = "TCP"
+	protocolTLSStr        = "TLS"
+	protocolDTLSStr       = "DTLS"
+	protocolTURNUDPStr    = "TURN-UDP"
+	protocolTURNTCPStr    = "TURN-TCP"
+	protocolTURNTLSStr    = "TURN-TLS"
+	protocolTURNDTLSStr   = "TURN-DTLS"
+	protocolUDP4Str       = "UDP4"
+	protocolTCP4Str       = "TCP4"
+	protocolUNIXStr       = "UNIX"
+	protocolUNIXGRAMStr   = "UNIXGRAM"
+	protocolUNIXPACKETStr = "UNIXPACKET"
+	protocolIPStr         = "IP"
+	protocolIP4Str        = "IP4"
+	protocolFILEStr       = "FILE"
 )
 
-// NewListenerProtocol parses the protocol specification.
-func NewListenerProtocol(raw string) (ListenerProtocol, error) {
+// NewProtocol parses a protocol name into a Protocol. It is permissive: it accepts any known
+// protocol token and errors only on an unrecognized string. Whether the result is admissible in a
+// particular context is a separate question, answered by the IsListenerProtocol/IsClusterProtocol
+// predicates.
+func NewProtocol(raw string) (Protocol, error) {
 	switch strings.ToUpper(raw) {
-	case listenerProtocolUDPStr:
-		return ListenerProtocolUDP, nil
-	case listenerProtocolTCPStr:
-		return ListenerProtocolTCP, nil
-	case listenerProtocolTLSStr:
-		return ListenerProtocolTLS, nil
-	case listenerProtocolDTLSStr:
-		return ListenerProtocolDTLS, nil
-	case listenerProtocolTURNUDPStr:
-		return ListenerProtocolTURNUDP, nil
-	case listenerProtocolTURNTCPStr:
-		return ListenerProtocolTURNTCP, nil
-	case listenerProtocolTURNTLSStr:
-		return ListenerProtocolTURNTLS, nil
-	case listenerProtocolTURNDTLSStr:
-		return ListenerProtocolTURNDTLS, nil
+	case protocolUDPStr:
+		return ProtocolUDP, nil
+	case protocolTCPStr:
+		return ProtocolTCP, nil
+	case protocolTLSStr:
+		return ProtocolTLS, nil
+	case protocolDTLSStr:
+		return ProtocolDTLS, nil
+	case protocolTURNUDPStr:
+		return ProtocolTURNUDP, nil
+	case protocolTURNTCPStr:
+		return ProtocolTURNTCP, nil
+	case protocolTURNTLSStr:
+		return ProtocolTURNTLS, nil
+	case protocolTURNDTLSStr:
+		return ProtocolTURNDTLS, nil
+	case protocolUDP4Str:
+		return ProtocolUDP4, nil
+	case protocolTCP4Str:
+		return ProtocolTCP4, nil
+	case protocolUNIXStr:
+		return ProtocolUNIX, nil
+	case protocolUNIXGRAMStr:
+		return ProtocolUNIXGRAM, nil
+	case protocolUNIXPACKETStr:
+		return ProtocolUNIXPACKET, nil
+	case protocolIPStr:
+		return ProtocolIP, nil
+	case protocolIP4Str:
+		return ProtocolIP4, nil
+	case protocolFILEStr:
+		return ProtocolFILE, nil
 	default:
-		return ListenerProtocol(ListenerProtocolUnknown),
-			fmt.Errorf("unknown listener protocol: \"%s\"", raw)
+		return ProtocolUnknown, fmt.Errorf("unknown protocol: \"%s\"", raw)
 	}
 }
 
-// String returns a string representation of a listener protocol.
-func (l ListenerProtocol) String() string {
-	switch l {
-	case ListenerProtocolUDP:
-		return listenerProtocolUDPStr
-	case ListenerProtocolTCP:
-		return listenerProtocolTCPStr
-	case ListenerProtocolTLS:
-		return listenerProtocolTLSStr
-	case ListenerProtocolDTLS:
-		return listenerProtocolDTLSStr
-	case ListenerProtocolTURNUDP:
-		return listenerProtocolTURNUDPStr
-	case ListenerProtocolTURNTCP:
-		return listenerProtocolTURNTCPStr
-	case ListenerProtocolTURNTLS:
-		return listenerProtocolTURNTLSStr
-	case ListenerProtocolTURNDTLS:
-		return listenerProtocolTURNDTLSStr
+// String returns the canonical string representation of a protocol.
+func (p Protocol) String() string {
+	switch p {
+	case ProtocolUDP:
+		return protocolUDPStr
+	case ProtocolTCP:
+		return protocolTCPStr
+	case ProtocolTLS:
+		return protocolTLSStr
+	case ProtocolDTLS:
+		return protocolDTLSStr
+	case ProtocolTURNUDP:
+		return protocolTURNUDPStr
+	case ProtocolTURNTCP:
+		return protocolTURNTCPStr
+	case ProtocolTURNTLS:
+		return protocolTURNTLSStr
+	case ProtocolTURNDTLS:
+		return protocolTURNDTLSStr
+	case ProtocolUDP4:
+		return protocolUDP4Str
+	case ProtocolTCP4:
+		return protocolTCP4Str
+	case ProtocolUNIX:
+		return protocolUNIXStr
+	case ProtocolUNIXGRAM:
+		return protocolUNIXGRAMStr
+	case ProtocolUNIXPACKET:
+		return protocolUNIXPACKETStr
+	case ProtocolIP:
+		return protocolIPStr
+	case ProtocolIP4:
+		return protocolIP4Str
+	case ProtocolFILE:
+		return protocolFILEStr
 	default:
 		return "<unknown>"
 	}
+}
+
+// ListenerProtocol is an alias for Protocol, retained for backward compatibility.
+type ListenerProtocol = Protocol
+
+const (
+	ListenerProtocolUnknown  = ProtocolUnknown
+	ListenerProtocolUDP      = ProtocolUDP
+	ListenerProtocolTCP      = ProtocolTCP
+	ListenerProtocolTLS      = ProtocolTLS
+	ListenerProtocolDTLS     = ProtocolDTLS
+	ListenerProtocolTURNUDP  = ProtocolTURNUDP
+	ListenerProtocolTURNTCP  = ProtocolTURNTCP
+	ListenerProtocolTURNTLS  = ProtocolTURNTLS
+	ListenerProtocolTURNDTLS = ProtocolTURNDTLS
+)
+
+// NewListenerProtocol parses a protocol name and rejects any protocol that is not valid for a
+// listener.
+func NewListenerProtocol(raw string) (Protocol, error) {
+	if p, err := NewProtocol(raw); err == nil {
+		switch p {
+		case ProtocolUDP, ProtocolTCP, ProtocolTLS, ProtocolDTLS,
+			ProtocolTURNUDP, ProtocolTURNTCP, ProtocolTURNTLS, ProtocolTURNDTLS:
+			return p, nil
+		}
+	}
+	return ProtocolUnknown, fmt.Errorf("unknown listener protocol: \"%s\"", raw)
 }
 
 // ClusterType specifies the cluster address resolution policy.
@@ -164,43 +245,25 @@ func (l ClusterType) String() string {
 	}
 }
 
-// ClusterProtocol specifies the network protocol for a cluster.
-type ClusterProtocol int
+// ClusterProtocol is an alias for Protocol, retained for backward compatibility.
+type ClusterProtocol = Protocol
 
 const (
-	ClusterProtocolUDP ClusterProtocol = iota + 1
-	ClusterProtocolTCP
-	ClusterProtocolUnknown
+	ClusterProtocolUDP     = ProtocolUDP
+	ClusterProtocolTCP     = ProtocolTCP
+	ClusterProtocolUnknown = ProtocolUnknown
 )
 
-const (
-	clusterProtocolUDPStr = "UDP"
-	clusterProtocolTCPStr = "TCP"
-)
-
-// NewClusterProtocol parses the protocol specification.
-func NewClusterProtocol(raw string) (ClusterProtocol, error) {
-	switch strings.ToUpper(raw) {
-	case clusterProtocolUDPStr:
-		return ClusterProtocolUDP, nil
-	case clusterProtocolTCPStr:
-		return ClusterProtocolTCP, nil
-	default:
-		return ClusterProtocol(ClusterProtocolUnknown),
-			fmt.Errorf("unknown cluster protocol: \"%s\"", raw)
+// NewClusterProtocol parses a protocol name and rejects any protocol that is not valid for a
+// cluster (backend).
+func NewClusterProtocol(raw string) (Protocol, error) {
+	if p, err := NewProtocol(raw); err == nil {
+		switch p {
+		case ProtocolUDP, ProtocolTCP:
+			return p, nil
+		}
 	}
-}
-
-// String returns a string representation of a cluster protocol.
-func (p ClusterProtocol) String() string {
-	switch p {
-	case ClusterProtocolUDP:
-		return clusterProtocolUDPStr
-	case ClusterProtocolTCP:
-		return clusterProtocolTCPStr
-	default:
-		return "<unknown>"
-	}
+	return ProtocolUnknown, fmt.Errorf("unknown cluster protocol: \"%s\"", raw)
 }
 
 // OffloadEngine specifies the type of TURN offload mode.
