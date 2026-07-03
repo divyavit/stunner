@@ -74,6 +74,14 @@ func TestParseURI(t *testing.T) {
 		{name: "rfc7065 default port", uri: "turn:1.2.3.4?transport=udp",
 			proto: "TURN-UDP", address: "1.2.3.4", port: 3478, network: "udp"},
 
+		// plain transport schemes (turncat listener/peer, not TURN)
+		{name: "plain udp", uri: "udp://1.2.3.4:5000",
+			proto: "UDP", address: "1.2.3.4", port: 5000, network: "udp", addr: "1.2.3.4:5000"},
+		{name: "plain tcp", uri: "tcp://1.2.3.4:5000",
+			proto: "TCP", address: "1.2.3.4", port: 5000, network: "tcp", addr: "1.2.3.4:5000"},
+		{name: "plain udp ipv6", uri: "udp://[2001:db8::1]:5000",
+			proto: "UDP", address: "2001:db8::1", port: 5000, network: "udp", addr: "[2001:db8::1]:5000"},
+
 		// IPv6, hierarchical (bracketed)
 		{name: "ipv6 udp", uri: "turn://[2001:db8::1]:3478?transport=udp",
 			proto: "TURN-UDP", address: "2001:db8::1", port: 3478, network: "udp", addr: "[2001:db8::1]:3478"},

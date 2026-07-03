@@ -70,11 +70,11 @@ func ParseURI(uri string) (*URI, error) {
 	// resolve into a net.Addr of the family implied by the address; net.JoinHostPort brackets IPv6
 	hostport := net.JoinHostPort(s.Address, strconv.Itoa(s.Port))
 	switch strings.ToLower(proto) {
-	case "udp", "dtls", "turn-udp", "turn-dtls":
+	case "udp", "udp4", "dtls", "turn-udp", "turn-dtls":
 		s.Addr, err = net.ResolveUDPAddr("udp", hostport)
-	case "tcp", "tls", "turn-tcp", "turn-tls":
+	case "tcp", "tcp4", "tls", "turn-tcp", "turn-tls":
 		s.Addr, err = net.ResolveTCPAddr("tcp", hostport)
-	case "ip":
+	case "ip", "ip4":
 		s.Addr, err = net.ResolveIPAddr("ip", s.Address)
 	case "unix", "unixgram", "unixpacket":
 		s.Addr, err = net.ResolveUnixAddr("unix", s.Address)
@@ -164,36 +164,46 @@ func upgradeTurnURI(uri string) string {
 	return uri
 }
 
+// getStunnerProtoForURI derives the canonical protocol name from a parsed URI. TURN URIs
+// ("turn"/"turns" scheme) map to a TURN listener protocol via their "?transport=" query per RFC 7065;
+// any other scheme is taken as a plain transport/socket protocol (udp, tcp, unix, ip, ...) and parsed
+// directly. An empty scheme defaults to "turn".
 func getStunnerProtoForURI(u *url.URL) (string, error) {
 	scheme := strings.ToLower(u.Scheme)
 	if scheme == "" {
 		scheme = "turn"
 	}
 
-	proto := "udp"
-	q := u.Query()
-	if len(q["transport"]) > 0 {
-		proto = strings.ToLower(q["transport"][0])
+	if scheme != "turn" && scheme != "turns" {
+		// plain transport/socket scheme, e.g. "udp://", "tcp://", "unix://"
+		p, err := stnrv1.NewProtocol(scheme)
+		if err != nil {
+			return "", fmt.Errorf("invalid scheme/protocol in URI %q", u.String())
+		}
+		return p.String(), nil
 	}
 
-	// fully specified protocol names (ignore "turns" scheme for compatibility)
-	switch proto {
-	case "tls":
-		return "TURN-TLS", nil
-	case "dtls":
-		return "TURN-DTLS", nil
+	transport := "udp"
+	if q := u.Query()["transport"]; len(q) > 0 {
+		transport = strings.ToLower(q[0])
 	}
 
-	// using RFC7065 compatible URIs
-	if scheme == "turn" && proto == "udp" {
-		return "TURN-UDP", nil
-	} else if scheme == "turn" && proto == "tcp" {
-		return "TURN-TCP", nil
-	} else if scheme == "turns" && proto == "udp" {
-		return "TURN-DTLS", nil
-	} else if scheme == "turns" && proto == "tcp" {
-		return "TURN-TLS", nil
+	switch {
+	// fully specified transport names (the "turn"/"turns" scheme is irrelevant here)
+	case transport == "tls":
+		return stnrv1.ProtocolTURNTLS.String(), nil
+	case transport == "dtls":
+		return stnrv1.ProtocolTURNDTLS.String(), nil
+	// RFC 7065 (scheme, transport) combinations
+	case scheme == "turn" && transport == "udp":
+		return stnrv1.ProtocolTURNUDP.String(), nil
+	case scheme == "turn" && transport == "tcp":
+		return stnrv1.ProtocolTURNTCP.String(), nil
+	case scheme == "turns" && transport == "udp":
+		return stnrv1.ProtocolTURNDTLS.String(), nil
+	case scheme == "turns" && transport == "tcp":
+		return stnrv1.ProtocolTURNTLS.String(), nil
+	default:
+		return "", fmt.Errorf("invalid scheme/protocol in URI %q", u.String())
 	}
-
-	return "", fmt.Errorf("invalid scheme/protocol in URI %q", u.String())
 }

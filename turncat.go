@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -90,29 +89,20 @@ func NewTurncat(config *TurncatConfig) (*Turncat, error) {
 	}
 
 	log.Tracef("resolving listener address: %s", config.ListenerAddr)
-	// special case the "-" client address
-	if config.ListenerAddr == "-" {
-		config.ListenerAddr = "file://stdin"
-	}
-	listener, lErr := url.Parse(config.ListenerAddr)
+	listenerURI, lErr := ParseURI(config.ListenerAddr)
 	if lErr != nil {
 		return nil, fmt.Errorf("error parsing listener address %q: %w", config.ListenerAddr, lErr)
 	}
-	listenerProtocol := strings.ToLower(listener.Scheme)
+	listenerProtocol := strings.ToLower(listenerURI.Protocol)
 
 	log.Tracef("resolving peer address: %s", config.PeerAddr)
-	peer, pErr := url.Parse(config.PeerAddr)
+	peerURI, pErr := ParseURI(config.PeerAddr)
 	if pErr != nil {
 		return nil, fmt.Errorf("error parsing peer address %q: %w", config.PeerAddr, pErr)
 	}
-	// default to UDP
-	peerAddress, err := net.ResolveUDPAddr("udp4", peer.Host)
-	if err != nil {
-		return nil, fmt.Errorf("error resolving peer address %q: %w", config.PeerAddr, err)
-	}
-	if peerAddress == nil || peerAddress.IP == nil {
-		return nil, fmt.Errorf("empty IP address in peer URL %q", config.PeerAddr)
-	}
+	// turncat only relays to a UDP peer; an incompatible protocol late-fails when the relay writes
+	// to it (net.PacketConn.WriteTo).
+	peerAddress := peerURI.Addr
 
 	if config.Realm == "" {
 		config.Realm = stnrv1.DefaultRealm
@@ -129,29 +119,22 @@ func NewTurncat(config *TurncatConfig) (*Turncat, error) {
 	case "file":
 		listenerConn = util.NewFileConn(os.Stdin)
 	case "udp", "udp4", "unixgram", "ip", "ip4":
-		addr, err := net.ResolveUDPAddr("udp4", listener.Host)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving listener address %q: %w", config.ListenerAddr, err)
-		}
-		l, err := listenConf.ListenPacket(context.Background(), addr.Network(), addr.String())
+		l, err := listenConf.ListenPacket(context.Background(),
+			listenerURI.Addr.Network(), listenerURI.Addr.String())
 		if err != nil {
 			return nil, fmt.Errorf("cannot create listening client packet socket at %s: %s",
 				config.ListenerAddr, err)
 		}
-		listenerAddress = addr
+		listenerAddress = listenerURI.Addr
 		listenerConn = l
 	case "tcp", "tcp4", "unix", "unixpacket":
-		addr, err := net.ResolveTCPAddr("tcp4", listener.Host)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving listener address %q: %w", config.ListenerAddr, err)
-		}
-
-		l, err := listenConf.Listen(context.Background(), addr.Network(), addr.String())
+		l, err := listenConf.Listen(context.Background(),
+			listenerURI.Addr.Network(), listenerURI.Addr.String())
 		if err != nil {
 			return nil, fmt.Errorf("cannot create listening client socket at %s: %s",
 				config.ListenerAddr, err)
 		}
-		listenerAddress = addr
+		listenerAddress = listenerURI.Addr
 		listenerConn = l
 	default:
 		return nil, fmt.Errorf("unknown client protocol %s", listenerProtocol)
