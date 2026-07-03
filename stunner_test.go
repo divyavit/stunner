@@ -709,9 +709,9 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 			log.Debugf("-------------- Running test: %s -------------", testName)
 
 			log.Debug("testing TURN URI")
-			uri, err := GetUriFromListener(&c.Listeners[0])
-			assert.NoError(t, err, "GetUriFromListener")
-			assert.Equal(t, test.uri, uri, "listener uri")
+			luri, err := NewURIFromListener(&c.Listeners[0])
+			assert.NoError(t, err, "NewURIFromListener")
+			assert.Equal(t, test.uri, luri.AsRFC7065String(), "listener uri")
 
 			log.Debug("creating a stunnerd")
 			stunner := NewStunner(Options{

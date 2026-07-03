@@ -182,7 +182,7 @@ func TestTurncatPlaintext(t *testing.T) {
 		listener, err := url.Parse(c.ListenerAddr)
 		assert.NoError(t, err, "cannot parse turncat listener URI")
 
-		server, err := ParseUri(c.ServerAddr)
+		server, err := ParseURI(c.ServerAddr)
 		assert.NoError(t, err, "cannot parse server URI")
 
 		testName := fmt.Sprintf("TestTurncat_NewTurncat_Plaintext_client:%s_server:%s",
@@ -296,7 +296,7 @@ func TestTurncatLongterm(t *testing.T) {
 		listener, err := url.Parse(c.ListenerAddr)
 		assert.NoError(t, err, "cannot parse turncat listener URI")
 
-		server, err := ParseUri(c.ServerAddr)
+		server, err := ParseURI(c.ServerAddr)
 		assert.NoError(t, err, "cannot parse server URI")
 
 		testName := fmt.Sprintf("TestTurncat_NewTurncat_Ephemeral_client:%s_server:%s",

@@ -235,7 +235,7 @@ func getStunnerConfFromCLI(def string) (*stnrv1.StunnerConfig, error) {
 		return nil, err
 	}
 
-	u, err := stunner.ParseUri(uri)
+	u, err := stunner.ParseURI(uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid STUNner URI %q: %s", uri, err)
 	}
@@ -307,7 +307,11 @@ func getStunnerURI(config *stnrv1.StunnerConfig) (string, error) {
 		return "", fmt.Errorf("no protocol for listener %q", l.Name)
 	}
 
-	return stunner.GetStandardURLFromListener(&l)
+	u, err := stunner.NewURIFromListener(&l)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
 }
 
 func parseK8sDef(def string) (string, string, string, error) {

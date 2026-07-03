@@ -58,7 +58,7 @@ type Options struct {
 // username/password pair `user:pass`. Health-checking is enabled at the default endpoint, metric
 // scraping is disabled.
 func NewDefaultConfig(uri string) (*stnrv1.StunnerConfig, error) {
-	u, err := ParseUri(uri)
+	u, err := ParseURI(uri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URI '%s': %s", uri, err)
 	}

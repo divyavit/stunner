@@ -137,55 +137,6 @@ func (req *ListenerConfig) String() string {
 	return fmt.Sprintf("%q:{%s}", n, strings.Join(status, ","))
 }
 
-// GetListenerURI is a helper that can output two types of Listener URIs: one with "://" after the
-// scheme or one with only ":" (as per RFC7065).
-func (req *ListenerConfig) GetListenerURI(rfc7065 bool) (string, error) {
-	proto, err := NewListenerProtocol(req.Protocol)
-	if err != nil {
-		return "", err
-	}
-
-	service, protocol := "", ""
-	switch proto {
-	case ListenerProtocolTURNUDP:
-		service = "turn"
-		protocol = "udp"
-	case ListenerProtocolTURNTCP:
-		service = "turn"
-		protocol = "tcp"
-	case ListenerProtocolTURNDTLS:
-		service = "turns"
-		protocol = "udp"
-	case ListenerProtocolTURNTLS:
-		service = "turns"
-		protocol = "tcp"
-	}
-
-	addr := req.PublicAddr
-	if addr == "" {
-		// Fallback to server addr
-		addr = req.Addr
-	}
-	if addr == "" || addr == DefaultNodeAddressPlaceholder {
-		// Fallback to localhost as a last resort
-		addr = "0.0.0.0"
-	}
-
-	port := req.PublicPort
-	if port == 0 {
-		// Fallback to server addr
-		port = req.Port
-	}
-
-	var uri string
-	if rfc7065 {
-		uri = fmt.Sprintf("%s:%s?transport=%s", service, net.JoinHostPort(addr, strconv.Itoa(port)), protocol)
-	} else {
-		uri = fmt.Sprintf("%s://%s?transport=%s", service, net.JoinHostPort(addr, strconv.Itoa(port)), protocol)
-	}
-	return uri, nil
-}
-
 type ListenerStatus struct {
 	*ListenerConfig
 	Stats OffloadDirStat `json:"stats"`

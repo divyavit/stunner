@@ -80,7 +80,7 @@ func NewTurncat(config *TurncatConfig) (*Turncat, error) {
 	log := loggerFactory.NewLogger("turncat")
 
 	log.Tracef("resolving TURN server address: %s", config.ServerAddr)
-	server, sErr := ParseUri(config.ServerAddr)
+	server, sErr := ParseURI(config.ServerAddr)
 	if sErr != nil {
 		return nil, fmt.Errorf("error resolving server address %s: %w", config.ServerAddr, sErr)
 	}
