@@ -19,8 +19,9 @@ type ListenerConfig struct {
 	// and "TURN-UDP" are equivalent (and so on for the other protocols). Default is
 	// "TURN-UDP".
 	Protocol string `json:"protocol,omitempty"`
-	// PublicAddr is the Internet-facing public IP address for the listener (ignored by
-	// STUNner).
+	// PublicAddr is the Internet-facing public address for the listener (ignored by STUNner). It
+	// must be a bare host: an IP literal (IPv4 or IPv6) or a DNS name, without brackets, port, or
+	// scheme.
 	PublicAddr string `json:"public_address,omitempty"`
 	// PublicPort is the Internet-facing public port for the listener (ignored by STUNner).
 	PublicPort int `json:"public_port,omitempty"`
@@ -122,7 +123,7 @@ func (req *ListenerConfig) String() string {
 	if req.PublicPort != 0 {
 		p = fmt.Sprintf("%d", req.PublicPort)
 	}
-	status = append(status, fmt.Sprintf("public=%s:%s", a, p))
+	status = append(status, fmt.Sprintf("public=%s", net.JoinHostPort(a, p)))
 
 	c, k := "-", "-"
 	if req.Cert != "" {
