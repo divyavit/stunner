@@ -2077,6 +2077,208 @@ var testReconcileDefault = []StunnerReconcileTestConfig{
 			assert.False(t, ok, "tcp-cluster endpoint not reachable over UDP")
 		},
 	},
+	// IPv6: listener address.
+	{
+		name: "reconcile-test: IPv6 listener address",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "default-listener",
+				Addr:     "2001:db8::1",
+				Protocol: "TURN-UDP",
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			// changing the listener address requires a restart
+			assert.Error(t, err, "restarted")
+			e, ok := err.(stnrv1.ErrRestarted)
+			assert.True(t, ok, "restarted status")
+			assert.Contains(t, e.Objects, "listener: default-listener", "restarted object")
+			l := s.GetListener("default-listener")
+			require.NotNil(t, l, "listener found")
+			assert.Equal(t, "2001:db8::1", listenerConf(t, l).Addr, "listener IPv6 address ok")
+		},
+	},
+	// IPv6: listener public address on an IPv4 listener (mixed families across addr/public-addr).
+	{
+		name: "reconcile-test: IPv6 listener public address",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:       "default-listener",
+				Addr:       "127.0.0.1",
+				Protocol:   "TURN-UDP",
+				PublicAddr: "2001:db8::2",
+				PublicPort: 33478,
+				Routes:     []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			assert.NoError(t, err, "reconcile")
+			l := s.GetListener("default-listener")
+			require.NotNil(t, l, "listener found")
+			assert.Equal(t, "127.0.0.1", listenerConf(t, l).Addr, "listener address ok")
+			assert.Equal(t, "2001:db8::2", listenerConf(t, l).PublicAddr, "listener IPv6 public address ok")
+			assert.Equal(t, 33478, listenerConf(t, l).PublicPort, "listener public port ok")
+		},
+	},
+	// IPv6: fully IPv6 listener with an IPv4 public address (the reverse mix).
+	{
+		name: "reconcile-test: IPv6 listener address with IPv4 public address",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:       "default-listener",
+				Addr:       "2001:db8::1",
+				Protocol:   "TURN-UDP",
+				PublicAddr: "1.2.3.4",
+				PublicPort: 33478,
+				Routes:     []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			// changing the listener address requires a restart
+			assert.Error(t, err, "restarted")
+			e, ok := err.(stnrv1.ErrRestarted)
+			assert.True(t, ok, "restarted status")
+			assert.Contains(t, e.Objects, "listener: default-listener", "restarted object")
+			l := s.GetListener("default-listener")
+			require.NotNil(t, l, "listener found")
+			assert.Equal(t, "2001:db8::1", listenerConf(t, l).Addr, "listener IPv6 address ok")
+			assert.Equal(t, "1.2.3.4", listenerConf(t, l).PublicAddr, "listener IPv4 public address ok")
+		},
+	},
+	// IPv6: fully-specified address in cluster endpoints (round-trips without a prefix length).
+	{
+		name: "reconcile-test: IPv6 cluster endpoint (fully-specified address)",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:   "default-listener",
+				Addr:   "127.0.0.1",
+				Routes: []string{"allow-some"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-some",
+				Endpoints: []string{"2001:db8::1"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			assert.NoError(t, err, "reconcile")
+			c := s.GetCluster("allow-some")
+			require.NotNil(t, c, "cluster found")
+			assert.Equal(t, stnrv1.ClusterTypeStatic, mustClusterType(t, c), "cluster type ok")
+			require.Len(t, clusterEndpoints(t, c), 1, "cluster endpoint count ok")
+			assert.Equal(t, "2001:db8::1", clusterEndpoints(t, c)[0], "cluster IPv6 endpoint ok")
+
+			l := s.GetListener("default-listener")
+			p := newPermissionHandler(s, l)
+			src := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+			assert.True(t, p(src, net.ParseIP("2001:db8::1")), "route to 2001:db8::1 ok")
+			assert.False(t, p(src, net.ParseIP("2001:db8::2")), "route to 2001:db8::2 fails")
+		},
+	},
+	// IPv6: prefix in cluster endpoints.
+	{
+		name: "reconcile-test: IPv6 cluster endpoint (prefix)",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:   "default-listener",
+				Addr:   "127.0.0.1",
+				Routes: []string{"allow-some"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-some",
+				Endpoints: []string{"2001:db8::/32"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			assert.NoError(t, err, "reconcile")
+			c := s.GetCluster("allow-some")
+			require.NotNil(t, c, "cluster found")
+			require.Len(t, clusterEndpoints(t, c), 1, "cluster endpoint count ok")
+			_, n, _ := net.ParseCIDR("2001:db8::/32")
+			assert.Equal(t, n.String(), clusterEndpoints(t, c)[0], "cluster IPv6 prefix ok")
+
+			l := s.GetListener("default-listener")
+			p := newPermissionHandler(s, l)
+			src := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+			assert.True(t, p(src, net.ParseIP("2001:db8::5")), "route to 2001:db8::5 ok")
+			assert.True(t, p(src, net.ParseIP("2001:db8:ffff::1")), "route within prefix ok")
+			assert.False(t, p(src, net.ParseIP("2001:dead::1")), "route outside prefix fails")
+		},
+	},
+	// IPv6: mixed IPv4/IPv6 endpoints in a single cluster; routing must match each family.
+	{
+		name: "reconcile-test: mixed IPv4/IPv6 cluster endpoints",
+		config: stnrv1.StunnerConfig{
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Credentials: map[string]string{"username": "user", "password": "pass"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:   "default-listener",
+				Addr:   "127.0.0.1",
+				Routes: []string{"allow-some"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-some",
+				Endpoints: []string{"1.1.1.1", "2001:db8::/32"},
+			}},
+		},
+		tester: func(t *testing.T, s *Stunner, err error) {
+			assert.NoError(t, err, "reconcile")
+			c := s.GetCluster("allow-some")
+			require.NotNil(t, c, "cluster found")
+			require.Len(t, clusterEndpoints(t, c), 2, "cluster endpoint count ok")
+			assert.Equal(t, "1.1.1.1", clusterEndpoints(t, c)[0], "cluster IPv4 endpoint ok")
+			_, n, _ := net.ParseCIDR("2001:db8::/32")
+			assert.Equal(t, n.String(), clusterEndpoints(t, c)[1], "cluster IPv6 prefix ok")
+
+			l := s.GetListener("default-listener")
+			p := newPermissionHandler(s, l)
+			src := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+			assert.True(t, p(src, net.ParseIP("1.1.1.1")), "route to IPv4 1.1.1.1 ok")
+			assert.False(t, p(src, net.ParseIP("2.2.2.2")), "route to IPv4 2.2.2.2 fails")
+			assert.True(t, p(src, net.ParseIP("2001:db8::5")), "route to IPv6 2001:db8::5 ok")
+			assert.False(t, p(src, net.ParseIP("2001:dead::1")), "route to IPv6 2001:dead::1 fails")
+		},
+	},
 }
 
 // start with default config and then reconcile with the given config

@@ -78,8 +78,29 @@ type echoTestConfig struct {
 	clusterProtocol string
 }
 
+// addrFamilySuffix returns "6" when the host in a "host:port" string is an IPv6 literal, else "4".
+// It selects the right network ("udp4"/"udp6", "tcp4"/"tcp6") for the peer/echo-server sockets.
+func addrFamilySuffix(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = hostport
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		return "6"
+	}
+	return "4"
+}
+
 func stunnerEchoTest(conf echoTestConfig) {
 	t := conf.t
+
+	// The client requests a relay of the same address family it reaches the server on: natAddr is
+	// the client's server-reflexive address, so an IPv6 client (hitting an IPv6 listener) requests
+	// an IPv6 relay. This mirrors pion/turn, which allocates an IPv6 relay only for IPv6 clients.
+	reqFamily := turn.RequestedAddressFamilyIPv4
+	if conf.natAddr != nil && conf.natAddr.To4() == nil {
+		reqFamily = turn.RequestedAddressFamilyIPv6
+	}
 
 	client, err := turn.NewClient(&turn.ClientConfig{
 		STUNServerAddr:         conf.stunnerAddr,
@@ -87,7 +108,7 @@ func stunnerEchoTest(conf echoTestConfig) {
 		Username:               conf.user,
 		Password:               conf.pass,
 		Conn:                   conf.lconn,
-		RequestedAddressFamily: turn.RequestedAddressFamilyIPv4,
+		RequestedAddressFamily: reqFamily,
 		Net:                    conf.wan,
 		LoggerFactory:          conf.loggerFactory,
 	})
@@ -149,7 +170,7 @@ func stunnerEchoTestUDP(conf echoTestConfig, client *turn.Client) {
 	}
 
 	log.Debugf("creating echo-server listener socket at: %s", conn.LocalAddr().String())
-	echoConn, err := conf.podnet.ListenPacket("udp4", conf.echoServerAddr)
+	echoConn, err := conf.podnet.ListenPacket("udp"+addrFamilySuffix(conf.echoServerAddr), conf.echoServerAddr)
 	if !assert.NoError(t, err, "creating echo socket") {
 		return
 	}
@@ -249,7 +270,8 @@ func stunnerEchoTestTCP(conf echoTestConfig, client *turn.Client) {
 	}
 	defer alloc.Close() //nolint:errcheck
 
-	peerAddr, err := net.ResolveTCPAddr("tcp4", conf.echoServerAddr)
+	network := "tcp" + addrFamilySuffix(conf.echoServerAddr)
+	peerAddr, err := net.ResolveTCPAddr(network, conf.echoServerAddr)
 	if !assert.NoError(t, err, "resolve echo address") {
 		return
 	}
@@ -258,13 +280,13 @@ func stunnerEchoTestTCP(conf echoTestConfig, client *turn.Client) {
 	assert.NoError(t, client.CreatePermission(peerAddr), "create permission")
 
 	if conf.echoSuccess == false {
-		_, derr := alloc.Dial("tcp4", conf.echoServerAddr)
+		_, derr := alloc.Dial(network, conf.echoServerAddr)
 		assert.Error(t, derr, "connecting to an unadmitted peer should fail")
 		return
 	}
 
 	log.Debugf("connecting through the relay to %s", conf.echoServerAddr)
-	dataConn, err := alloc.Dial("tcp4", conf.echoServerAddr)
+	dataConn, err := alloc.Dial(network, conf.echoServerAddr)
 	if !assert.NoError(t, err, "TCP connect through relay") {
 		return
 	}
@@ -374,7 +396,17 @@ func buildVNet(logger logging.LoggerFactory) (*VNet, error) {
 type TestStunnerConfigCase struct {
 	config stnrv1.StunnerConfig
 	uri    string
+	// echoServerAddr overrides the upstream peer/echo-server address; when empty it defaults to the
+	// loopback of the listener's address family. Set it to a different-family loopback to build a
+	// cross-family (mixed IPv4/IPv6) scenario where the relay and the peer belong to distinct families.
+	echoServerAddr string
+	// echoSuccess is the expected echo-roundtrip outcome; nil means success (the default). A
+	// cross-family relay/peer combination is expected to fail per pion/turn's address-family rules.
+	echoSuccess *bool
 }
+
+// boolPtr returns a pointer to b, for the optional *bool fields in TestStunnerConfigCase.
+func boolPtr(b bool) *bool { return &b }
 
 var TestStunnerConfigsWithLocalhost = []TestStunnerConfigCase{
 	{
@@ -651,6 +683,153 @@ var TestStunnerConfigsWithLocalhost = []TestStunnerConfigCase{
 		},
 		uri: "turns:1.2.3.4:3478?transport=udp",
 	},
+	{
+		config: stnrv1.StunnerConfig{
+			// IPv6 udp, static: IPv6 listener -> IPv6 relay -> IPv6 peer
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "udp",
+				Protocol: "turn-udp",
+				Addr:     "::1",
+				Port:     23478,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri: "turn:[::1]:23478?transport=udp",
+	},
+	{
+		config: stnrv1.StunnerConfig{
+			// IPv6 tcp, static
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "tcp",
+				Protocol: "turn-tcp",
+				Addr:     "::1",
+				Port:     23478,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri: "turn:[::1]:23478?transport=tcp",
+	},
+	{
+		config: stnrv1.StunnerConfig{
+			// IPv6 turn-tcp listener, tcp cluster (RFC 6062), static
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "tcp",
+				Protocol: "turn-tcp",
+				Addr:     "::1",
+				Port:     23478,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Protocol:  "tcp",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri: "turn:[::1]:23478?transport=tcp",
+	},
+	{
+		config: stnrv1.StunnerConfig{
+			// IPv6 tls, static
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "tls",
+				Protocol: "turn-tls",
+				Addr:     "::1",
+				Port:     23478,
+				Cert:     certPem64,
+				Key:      keyPem64,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri: "turns:[::1]:23478?transport=tcp",
+	},
+	{
+		config: stnrv1.StunnerConfig{
+			// IPv6 dtls, static
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "dtls",
+				Protocol: "turn-dtls",
+				Addr:     "::1",
+				Port:     23478,
+				Cert:     certPem64,
+				Key:      keyPem64,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri: "turns:[::1]:23478?transport=udp",
+	},
+	{
+		config: stnrv1.StunnerConfig{
+			// mixed: IPv6 listener -> IPv6 relay, but IPv4 peer. Reaching an IPv4 peer over an IPv6
+			// relay is an error (pion/turn address-family rule), so the echo round-trip must fail
+			// even though the cluster admits the peer.
+			ApiVersion: stnrv1.ApiVersion,
+			Admin:      stnrv1.AdminConfig{LogLevel: stunnerTestLoglevel},
+			Auth: stnrv1.AuthConfig{
+				Type:        "static",
+				Credentials: map[string]string{"username": "user1", "password": "passwd1"},
+			},
+			Listeners: []stnrv1.ListenerConfig{{
+				Name:     "udp",
+				Protocol: "turn-udp",
+				Addr:     "::1",
+				Port:     23478,
+				Routes:   []string{"allow-any"},
+			}},
+			Clusters: []stnrv1.ClusterConfig{{
+				Name:      "allow-any",
+				Endpoints: []string{"0.0.0.0/0", "::/0"},
+			}},
+		},
+		uri:            "turn:[::1]:23478?transport=udp",
+		echoServerAddr: "127.0.0.1:25678",
+		echoSuccess:    boolPtr(false),
+	},
 	// // dtls, ephemeral
 	// {
 	// 	ApiVersion: stnrv1.ApiVersion,
@@ -702,8 +881,15 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 		if clusterProto == "" {
 			clusterProto = "udp"
 		}
-		testName := fmt.Sprintf("TestStunner_NewStunner_Localhost_auth:%s_client:%s_cluster:%s",
-			auth, proto, clusterProto)
+		family := "ipv4"
+		if ip := net.ParseIP(c.Listeners[0].Addr); ip != nil && ip.To4() == nil {
+			family = "ipv6"
+		}
+		testName := fmt.Sprintf("TestStunner_NewStunner_Localhost_listener:%s_auth:%s_client:%s_cluster:%s",
+			family, auth, proto, clusterProto)
+		if test.echoServerAddr != "" {
+			testName += "_peer:" + test.echoServerAddr
+		}
 
 		t.Run(testName, func(t *testing.T) {
 			log.Debugf("-------------- Running test: %s -------------", testName)
@@ -733,13 +919,28 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 
 			u, p := getTestCredentials(t, auth, "user1", "passwd1", "my-secret")
 
-			stunnerAddr := "127.0.0.1:23478"
+			// Derive the client/relay/peer addressing from the listener's address family. pion/turn
+			// allocates an IPv6 relay only when the client reaches an IPv6 listener, so the whole
+			// data path (client socket, STUN mapped address, echo server) follows the listener family.
+			host, wildcard, fam := "127.0.0.1", "0.0.0.0:0", "4"
+			if ip := net.ParseIP(c.Listeners[0].Addr); ip != nil && ip.To4() == nil {
+				host, wildcard, fam = "::1", "[::]:0", "6"
+			}
+			stunnerAddr := net.JoinHostPort(host, "23478")
+			echoServerAddr := net.JoinHostPort(host, "25678")
+			if test.echoServerAddr != "" {
+				echoServerAddr = test.echoServerAddr
+			}
+			echoSuccess := true
+			if test.echoSuccess != nil {
+				echoSuccess = *test.echoSuccess
+			}
 
 			log.Debug("creating a client")
 			var lconn net.PacketConn
 			switch strings.ToLower(proto) {
 			case "turn-udp":
-				lconn, err = net.ListenPacket("udp4", "0.0.0.0:0")
+				lconn, err = net.ListenPacket("udp"+fam, wildcard)
 				assert.NoError(t, err, "cannot create UDP client socket")
 			case "turn-tcp":
 				conn, cErr := net.Dial("tcp", stunnerAddr)
@@ -759,8 +960,8 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 				cer, err := tls.X509KeyPair(certPem, keyPem)
 				assert.NoError(t, err, "cannot create certificate for DTLS client socket")
 				// for some reason dtls.Listen requires a UDPAddr and not an addr string
-				udpAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 23478}
-				conn, err := dtls.Dial("udp4", udpAddr, &dtls.Config{
+				udpAddr := &net.UDPAddr{IP: net.ParseIP(host), Port: 23478}
+				conn, err := dtls.Dial("udp"+fam, udpAddr, &dtls.Config{
 					Certificates:       []tls.Certificate{cer},
 					InsecureSkipVerify: true,
 				})
@@ -771,10 +972,23 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 			}
 
 			stdnet, _ := stdnet.NewNet()
-			testConfig := echoTestConfig{t, stdnet, stdnet, stunner,
-				stunnerAddr, lconn, u, p, net.IPv4(127, 0, 0, 1),
-				"127.0.0.1:25678", true, true, true, loggerFactory, ""}
-			testConfig.clusterProtocol = c.Clusters[0].Protocol
+			testConfig := echoTestConfig{
+				t:               t,
+				podnet:          stdnet,
+				wan:             stdnet,
+				stunner:         stunner,
+				stunnerAddr:     stunnerAddr,
+				lconn:           lconn,
+				user:            u,
+				pass:            p,
+				natAddr:         net.ParseIP(host),
+				echoServerAddr:  echoServerAddr,
+				allocateSuccess: true,
+				bindSuccess:     true,
+				echoSuccess:     echoSuccess,
+				loggerFactory:   loggerFactory,
+				clusterProtocol: c.Clusters[0].Protocol,
+			}
 			stunnerEchoTest(testConfig)
 
 			assert.NoError(t, lconn.Close(), "cannot close TURN client connection")
