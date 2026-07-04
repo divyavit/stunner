@@ -1,6 +1,7 @@
 package stunner
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,6 +132,31 @@ func TestParseURI(t *testing.T) {
 				require.NotNil(t, u.Addr, "addr")
 				assert.Equal(t, tc.addr, u.Addr.String(), "addr string")
 			}
+		})
+	}
+}
+
+// hasUnbracketedIPv6 gates the deterministic rejection of unbracketed IPv6 hosts, independent of the
+// urlstrictcolons GODEBUG. url.URL.Hostname/Port is not GODEBUG-gated, so a URL with a raw authority
+// that looks like an unbracketed IPv6 (what url.Parse yields under urlstrictcolons=0) is detected
+// deterministically here.
+func TestHasUnbracketedIPv6(t *testing.T) {
+	for _, tc := range []struct {
+		host string // url.URL.Host (raw authority)
+		want bool
+	}{
+		{"2001:db8::1:3478", true}, // unbracketed IPv6 with port
+		{"[2001:db8::1]:3478", false},
+		{"[::1]:3478", false},
+		{"[2001:db8::1]", false}, // bracketed, no port
+		{"[::1]", false},
+		{"1.2.3.4:3478", false},
+		{"1.2.3.4", false},
+		{"turn.example.com:3478", false},
+		{"", false},
+	} {
+		t.Run(tc.host, func(t *testing.T) {
+			assert.Equal(t, tc.want, hasUnbracketedIPv6(&url.URL{Host: tc.host}))
 		})
 	}
 }

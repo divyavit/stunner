@@ -43,6 +43,10 @@ func ParseURI(uri string) (*URI, error) {
 		return nil, fmt.Errorf("invalid URI %q: %w", uri, err)
 	}
 
+	if hasUnbracketedIPv6(u) {
+		return nil, fmt.Errorf("invalid URI %q: IPv6 host must be bracketed, e.g. [%s]", uri, u.Hostname())
+	}
+
 	proto, err := getStunnerProtoForURI(u)
 	if err != nil {
 		return nil, err
@@ -162,6 +166,14 @@ func upgradeTurnURI(uri string) string {
 		}
 	}
 	return uri
+}
+
+// hasUnbracketedIPv6 reports whether a parsed URL's authority carries an unbracketed IPv6 literal,
+// which RFC 3986 forbids.
+func hasUnbracketedIPv6(u *url.URL) bool {
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && ip.To4() == nil && u.Port() != "" &&
+		u.Host != net.JoinHostPort(u.Hostname(), u.Port())
 }
 
 // getStunnerProtoForURI derives the canonical protocol name from a parsed URI. TURN URIs
