@@ -140,6 +140,9 @@ func TestStunnerConfigFileRoundTrip(t *testing.T) {
 
 	checkDefaultConfig(t, c, "TURN-UDP")
 
+	// exercise the optional public_addresses list through the round-trip
+	c.Listeners[0].PublicAddrs = []string{"1.2.3.4", "2001:db8::1"}
+
 	file, err2 := yaml.Marshal(c)
 	assert.NoError(t, err2, "marschal config fike")
 

@@ -25,6 +25,9 @@ type ListenerConfig struct {
 	PublicAddr string `json:"public_address,omitempty"`
 	// PublicPort is the Internet-facing public port for the listener (ignored by STUNner).
 	PublicPort int `json:"public_port,omitempty"`
+	// PublicAddrs is the list of Internet-facing public addresses for the listener. Ignored by
+	// stunnerd, used only to build ICE server configurations for dual-stack servers.
+	PublicAddrs []string `json:"public_addresses,omitempty"`
 	// Addr is the IP address for the listener. Default is localhost.
 	Addr string `json:"address,omitempty"`
 	// Port is the port for the listener. Default is the standard TURN port (3478).
@@ -74,6 +77,10 @@ func (req *ListenerConfig) Validate() error {
 		}
 	}
 
+	if req.PublicAddrs == nil {
+		req.PublicAddrs = []string{}
+	}
+
 	if req.Routes == nil {
 		req.Routes = []string{}
 	}
@@ -98,6 +105,8 @@ func (req *ListenerConfig) DeepCopyInto(dst Config) {
 	*ret = *req
 	ret.Routes = make([]string, len(req.Routes))
 	copy(ret.Routes, req.Routes)
+	ret.PublicAddrs = make([]string, len(req.PublicAddrs))
+	copy(ret.PublicAddrs, req.PublicAddrs)
 }
 
 // String stringifies the configuration.
