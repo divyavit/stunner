@@ -28,8 +28,12 @@ type ListenerConfig struct {
 	// PublicAddrs is the list of Internet-facing public addresses for the listener. Ignored by
 	// stunnerd, used only to build ICE server configurations for dual-stack servers.
 	PublicAddrs []string `json:"public_addresses,omitempty"`
-	// Addr is the IP address for the listener. Default is localhost.
+	// Addr is the IP address for the listener. Default is "0.0.0.0".
 	Addr string `json:"address,omitempty"`
+	// Addrs is the list of IP addresses advertised to clients as the relayed transport
+	// address. On a dual-stack deployment it holds one address per family, single-stack holds
+	// a single-element list. Set to status.podIPs by the operator.
+	Addrs []string `json:"addresses,omitempty"`
 	// Port is the port for the listener. Default is the standard TURN port (3478).
 	Port int `json:"port,omitempty"`
 	// Cert is the base64-encoded TLS cert.
@@ -81,6 +85,18 @@ func (req *ListenerConfig) Validate() error {
 		req.PublicAddrs = []string{}
 	}
 
+	// Addrs may arrive comma-separated (the k8s downward API renders status.podIPs as
+	// "ip1,ip2"): normalize to one entry per address, dropping blanks.
+	normalizedAddrs := make([]string, 0, len(req.Addrs))
+	for _, a := range req.Addrs {
+		for _, part := range strings.Split(a, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				normalizedAddrs = append(normalizedAddrs, part)
+			}
+		}
+	}
+	req.Addrs = normalizedAddrs
+
 	if req.Routes == nil {
 		req.Routes = []string{}
 	}
@@ -107,6 +123,8 @@ func (req *ListenerConfig) DeepCopyInto(dst Config) {
 	copy(ret.Routes, req.Routes)
 	ret.PublicAddrs = make([]string, len(req.PublicAddrs))
 	copy(ret.PublicAddrs, req.PublicAddrs)
+	ret.Addrs = make([]string, len(req.Addrs))
+	copy(ret.Addrs, req.Addrs)
 }
 
 // String stringifies the configuration.

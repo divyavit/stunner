@@ -3,6 +3,7 @@ package turn
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/pion/turn/v5"
 
@@ -17,21 +18,50 @@ import (
 type Relay struct {
 	listener string
 	runtime  *objruntime.Runtime
-	// relayIP is the address advertised to the client for relayed transport addresses.
-	relayIP net.IP
+	// addrs are the candidate relay addresses advertised to the client per family; the one
+	// matching the allocation family is used.
+	addrs    []net.IP
+	fallback net.IP
 }
 
 // NewRelay creates a relay address generator for a listener context.
 func NewRelay(listener string, rt *objruntime.Runtime) *Relay {
 	conf := rt.GetConfig(objruntime.TypeListener, listener).(*stnrv1.ListenerConfig)
-	ip := net.ParseIP(conf.Addr)
-	if ip == nil && conf.Addr == "localhost" {
-		ip = net.ParseIP("127.0.0.1")
+	addrs, fallback := parseRelayAddrs(conf)
+	if fallback == nil && len(addrs) == 0 {
+		panic(fmt.Sprintf("turn: no valid relay address for %q: address=%q addresses=%v",
+			listener, conf.Addr, conf.Addrs))
 	}
-	if ip == nil {
-		panic(fmt.Sprintf("turn: invalid listener address for %q: %s", listener, conf.Addr))
+	return &Relay{listener: listener, runtime: rt, addrs: addrs, fallback: fallback}
+}
+
+// parseRelayAddrs derives a listener's candidate relay addresses (Addrs, at most one per family) and
+// the Addr fallback. "localhost" is not an IP literal, so it is treated as the dual-stack loopback so
+// relayIPFor can still match either family.
+func parseRelayAddrs(conf *stnrv1.ListenerConfig) (addrs []net.IP, fallback net.IP) {
+	fallback = net.ParseIP(conf.Addr)
+	for _, a := range conf.Addrs {
+		if ip := net.ParseIP(a); ip != nil {
+			addrs = append(addrs, ip)
+		}
 	}
-	return &Relay{listener: listener, runtime: rt, relayIP: ip}
+	if fallback == nil && len(addrs) == 0 && conf.Addr == "localhost" {
+		addrs = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	}
+	return addrs, fallback
+}
+
+// relayIPFor returns the relay address to advertise for an allocation of the given network's family
+// ("udp4"/"udp6"/"tcp4"/"tcp6"): the first configured Addrs entry of that family, else the listener
+// Addr fallback.
+func (r *Relay) relayIPFor(network string) net.IP {
+	wantV6 := strings.HasSuffix(network, "6")
+	for _, ip := range r.addrs {
+		if (ip.To4() == nil) == wantV6 {
+			return ip
+		}
+	}
+	return r.fallback
 }
 
 // Validate is called on server startup and confirms the RelayAddressGenerator is configured.
@@ -39,7 +69,7 @@ func (r *Relay) Validate() error { return nil }
 
 // AllocatePacketConn allocates the UDP relayed transport address of an allocation.
 func (r *Relay) AllocatePacketConn(conf turn.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
-	return netutil.NewRelayPacketConn(r.runtime, r.listener, r.relayIP, conf.Network, conf.RequestedPort)
+	return netutil.NewRelayPacketConn(r.runtime, r.listener, r.relayIPFor(conf.Network), conf.Network, conf.RequestedPort)
 }
 
 // AllocateConn opens an outgoing connection for an RFC 6062 Connect request, sourced from the
@@ -55,5 +85,5 @@ func (r *Relay) AllocateListener(conf turn.AllocateListenerConfig) (net.Listener
 	if !netutil.HasRoutedCluster(r.runtime, r.listener, netutil.ProtocolFromNetwork(conf.Network)) {
 		return nil, nil, netutil.ErrPortProhibited
 	}
-	return netutil.NewRelayListener(r.runtime, r.listener, r.relayIP, conf.Network, conf.RequestedPort)
+	return netutil.NewRelayListener(r.runtime, r.listener, r.relayIPFor(conf.Network), conf.Network, conf.RequestedPort)
 }

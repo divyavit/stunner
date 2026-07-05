@@ -31,6 +31,7 @@ type Listener struct {
 	publicPort             int
 	publicAddrs            []string
 	rawAddr                string
+	addrs                  []string
 	cert, key              []byte
 	routes                 []string
 
@@ -174,6 +175,9 @@ func (l *Listener) Reconcile(conf stnrv1.Config) error {
 	l.publicAddrs = make([]string, len(req.PublicAddrs))
 	copy(l.publicAddrs, req.PublicAddrs)
 
+	l.addrs = make([]string, len(req.Addrs))
+	copy(l.addrs, req.Addrs)
+
 	l.routes = make([]string, len(req.Routes))
 	copy(l.routes, req.Routes)
 
@@ -192,10 +196,13 @@ func (l *Listener) buildConfig() *stnrv1.ListenerConfig {
 	sort.Strings(routes)
 	publicAddrs := make([]string, len(l.publicAddrs))
 	copy(publicAddrs, l.publicAddrs)
+	addrs := make([]string, len(l.addrs))
+	copy(addrs, l.addrs)
 	c := &stnrv1.ListenerConfig{
 		Name:        l.name,
 		Protocol:    l.proto.String(),
 		Addr:        l.rawAddr,
+		Addrs:       addrs,
 		Port:        l.port,
 		PublicAddr:  l.publicAddr,
 		PublicPort:  l.publicPort,
@@ -224,6 +231,8 @@ func (l *Listener) GetConfig() stnrv1.Config {
 	copy(cp.Routes, snap.Routes)
 	cp.PublicAddrs = make([]string, len(snap.PublicAddrs))
 	copy(cp.PublicAddrs, snap.PublicAddrs)
+	cp.Addrs = make([]string, len(snap.Addrs))
+	copy(cp.Addrs, snap.Addrs)
 	return &cp
 }
 

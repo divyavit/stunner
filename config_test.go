@@ -140,8 +140,13 @@ func TestStunnerConfigFileRoundTrip(t *testing.T) {
 
 	checkDefaultConfig(t, c, "TURN-UDP")
 
-	// exercise the optional public_addresses list through the round-trip
+	// exercise the optional public_addresses and addresses lists through the round-trip. addresses
+	// is given comma-separated (as the k8s downward API delivers status.podIPs); Validate normalizes
+	// it to a per-address list, which must then survive the round-trip.
 	c.Listeners[0].PublicAddrs = []string{"1.2.3.4", "2001:db8::1"}
+	c.Listeners[0].Addrs = []string{"1.2.3.4,2001:db8::1"}
+	assert.NoError(t, c.Validate(), "re-validate after setting addrs")
+	assert.Equal(t, []string{"1.2.3.4", "2001:db8::1"}, c.Listeners[0].Addrs, "addresses comma-split")
 
 	file, err2 := yaml.Marshal(c)
 	assert.NoError(t, err2, "marschal config fike")
