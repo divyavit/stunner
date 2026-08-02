@@ -129,6 +129,39 @@ func (u *URI) format(sep string) string {
 		net.JoinHostPort(u.Address, strconv.Itoa(u.Port)), transport)
 }
 
+// TURNServer converts a parsed TURN URI into the upstream TURN server description used in cluster
+// configs, plus the transport to reach it over. The two travel as a pair because the transport lives
+// on the cluster, not on the server: a TURNServer names a server, a cluster protocol says how to
+// reach it. Fails on a URI whose protocol is not a TURN transport.
+//
+// Credentials come from the URI's userinfo as a "static" auth block, so a URI carrying none yields
+// a server with none. This is not the path for dynamically generated credentials (turncat mints a
+// fresh pair per client connection); those are set on the dialer config directly.
+func (u *URI) TURNServer() (*stnrv1.TURNServer, stnrv1.Protocol, error) {
+	proto, err := stnrv1.NewProtocol(u.Protocol)
+	if err != nil {
+		return nil, stnrv1.ProtocolUnknown, err
+	}
+	if !proto.IsTURN() {
+		return nil, stnrv1.ProtocolUnknown, fmt.Errorf("not a TURN URI: protocol %q is not a "+
+			"TURN transport", u.Protocol)
+	}
+
+	s := &stnrv1.TURNServer{
+		Address: u.Address,
+		Port:    u.Port,
+	}
+	if u.Username != "" || u.Password != "" {
+		s.Auth = &stnrv1.AuthConfig{Type: "static", Credentials: map[string]string{
+			"username": u.Username, "password": u.Password}}
+	}
+	if err := s.Validate(); err != nil {
+		return nil, stnrv1.ProtocolUnknown, err
+	}
+
+	return s, proto, nil
+}
+
 // NewURIFromListener builds a server URI from a listener configuration. The public address and port
 // are preferred over the listen address and port; a missing or placeholder address falls back to
 // "0.0.0.0". The returned URI carries no resolved net.Addr — it is meant for its string forms.

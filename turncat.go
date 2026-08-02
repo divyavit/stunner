@@ -2,25 +2,21 @@ package stunner
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"sync"
 
-	"github.com/pion/dtls/v3"
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5"
 
+	"github.com/l7mp/stunner/internal/turnclient"
 	"github.com/l7mp/stunner/internal/util"
 	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	a12n "github.com/l7mp/stunner/pkg/authentication"
 )
 
 const UDP_PACKET_SIZE = 1500
-
-// AuthGen is a function called by turncat to generate authentication tokens.
-type AuthGen func() (string, string, error)
 
 // TurncatConfig is the main configuration for the turncat relay.
 type TurncatConfig struct {
@@ -30,10 +26,11 @@ type TurncatConfig struct {
 	ServerAddr string
 	// PeerAddr specifies the remote peer to connect to.
 	PeerAddr string
-	// Realm is the STUN/TURN realm.
-	Realm string
-	// AuthGet specifies the function to generate auth tokens.
-	AuthGen AuthGen
+	// Auth specifies how to authenticate to the TURN server, exactly as in a stunnerd config:
+	// "static" with a fixed username/password pair, or "ephemeral" with a shared secret from
+	// which a fresh time-windowed credential is generated per client connection, valid for the
+	// configured lifetime. A nil config dials anonymously. The realm rides along in the config.
+	Auth *stnrv1.AuthConfig
 	// ServerName is the SNI used for virtual hosting (unless it is an IP address).
 	ServerName string
 	// InsecureMode controls whether self-signed TLS certificates are accepted by the TURN
@@ -49,11 +46,10 @@ type Turncat struct {
 	serverAddr    net.Addr
 	serverProto   string
 	peerAddr      net.Addr
-	realm         string
+	auth          *stnrv1.AuthConfig     // How to authenticate to the server.
 	listenerConn  interface{}            // net.Conn or net.PacketConn
 	connTrack     map[string]*connection // Conntrack table.
 	lock          *sync.Mutex            // Sync access to the conntrack state.
-	authGen       AuthGen                // Generate auth tokens.
 	serverName    string
 	insecure      bool
 	loggerFactory logging.LoggerFactory
@@ -62,10 +58,8 @@ type Turncat struct {
 
 type connection struct {
 	clientAddr net.Addr       // Address of the client
-	turnClient *turn.Client   // TURN client associated with the connection
 	clientConn net.Conn       // Socket connected back to the client
-	turnConn   net.PacketConn // Socket for the TURN client
-	serverConn net.PacketConn // Relayed UDP connection to server
+	serverConn net.PacketConn // Relayed UDP connection to the server; owns the TURN session
 }
 
 // NewTurncat creates a new turncat relay from the specified config, creating a listener socket for
@@ -103,10 +97,6 @@ func NewTurncat(config *TurncatConfig) (*Turncat, error) {
 	// turncat only relays to a UDP peer; an incompatible protocol late-fails when the relay writes
 	// to it (net.PacketConn.WriteTo).
 	peerAddress := peerURI.Addr
-
-	if config.Realm == "" {
-		config.Realm = stnrv1.DefaultRealm
-	}
 
 	// a global listener connection for the local tunnel endpoint
 	// per-client connections will connect back to the client
@@ -148,8 +138,7 @@ func NewTurncat(config *TurncatConfig) (*Turncat, error) {
 		listenerConn:  listenerConn,
 		connTrack:     make(map[string]*connection),
 		lock:          new(sync.Mutex),
-		realm:         config.Realm,
-		authGen:       config.AuthGen,
+		auth:          config.Auth,
 		serverName:    config.ServerName,
 		insecure:      config.InsecureMode,
 		loggerFactory: loggerFactory,
@@ -221,89 +210,37 @@ func (t *Turncat) newConnection(clientConn net.Conn) (*connection, error) {
 
 	t.log.Tracef("setting up TURN client to server %s:%s", t.serverAddr.Network(), t.serverAddr.String())
 
-	user, passwd, errAuth := t.authGen()
+	user, passwd, errAuth := a12n.GenerateCredentials(t.auth)
 	if errAuth != nil {
 		return nil, fmt.Errorf("failed to generate username/password pair for client %s:%s: %s",
 			clientAddr.Network(), clientAddr.String(), errAuth)
 	}
 
-	// connection for the TURN client
-	var turnConn net.PacketConn
-	switch strings.ToLower(t.serverProto) {
-	case "turn-udp":
-		t, err := net.ListenPacket("udp4", "0.0.0.0:0")
-		if err != nil {
-			return nil, fmt.Errorf("failed to allocate TURN listening packet socket for client %s:%s: %s",
-				clientAddr.Network(), clientAddr.String(), err)
-		}
-		turnConn = t
-	case "turn-tcp":
-		c, err := net.Dial("tcp4", t.serverAddr.String())
-		if err != nil {
-			return nil, fmt.Errorf("failed to allocate TURN socket for client %s:%s: %s",
-				clientAddr.Network(), clientAddr.String(), err)
-		}
-		turnConn = turn.NewSTUNConn(c)
-	case "turn-tls":
-		// cert, err := tls.LoadX509KeyPair(certFile.Name(), keyFile.Name())
-		// assert.NoError(t, err, "cannot create certificate for TLS client socket")
-		c, err := tls.Dial("tcp4", t.serverAddr.String(), &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			ServerName:         t.serverName,
-			InsecureSkipVerify: t.insecure,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to allocate TURN/TLS socket for client %s:%s: %s",
-				clientAddr.Network(), clientAddr.String(), err)
-		}
-		turnConn = turn.NewSTUNConn(c)
-	case "turn-dtls":
-		// cert, err := tls.LoadX509KeyPair(certFile.Name(), keyFile.Name())
-		// assert.NoError(t, err, "cannot create certificate for DTLS client socket")
-		udpAddr, _ := net.ResolveUDPAddr("udp4", t.serverAddr.String())
-		conn, err := dtls.DialWithOptions("udp4", udpAddr,
-			dtls.WithInsecureSkipVerify(t.insecure),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to allocate TURN/DTLS socket for client %s:%s: %s",
-				clientAddr.Network(), clientAddr.String(), err)
-		}
-		turnConn = turn.NewSTUNConn(conn)
-	default:
+	realm := ""
+	if t.auth != nil {
+		realm = t.auth.Realm
+	}
+
+	proto, err := stnrv1.NewListenerProtocol(t.serverProto)
+	if err != nil {
 		return nil, fmt.Errorf("unknown TURN server protocol %q for client %s:%s",
 			t.serverProto, clientAddr.Network(), clientAddr.String())
 	}
 
-	turnClient, err := turn.NewClient(&turn.ClientConfig{
-		STUNServerAddr: t.serverAddr.String(),
-		TURNServerAddr: t.serverAddr.String(),
-		Conn:           turnConn,
-		Username:       user,
-		Password:       passwd,
-		Realm:          t.realm,
-		LoggerFactory:  t.loggerFactory,
-	})
-	if err != nil {
-		turnConn.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to allocate TURN client for client %s:%s: %s",
-			clientAddr.Network(), clientAddr.String(), err)
-	}
-	conn.turnConn = turnConn
-
-	// Start the TURN client
-	if err = turnClient.Listen(); err != nil {
-		turnConn.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to listen on TURN client: %s", err)
-
-	}
-	conn.turnClient = turnClient
-
 	t.log.Tracef("allocating relay transport for client %s:%s", clientAddr.Network(), clientAddr.String())
-	serverConn, serverErr := turnClient.Allocate()
-	if serverErr != nil {
-		turnClient.Close()
-		return nil, fmt.Errorf("failed to allocate TURN relay transport for client %s:%s: %s",
-			clientAddr.Network(), clientAddr.String(), serverErr.Error())
+	serverConn, err := turnclient.Dialer{Config: turnclient.Config{
+		Protocol:      proto,
+		ServerAddr:    t.serverAddr.String(),
+		Username:      user,
+		Password:      passwd,
+		Realm:         realm,
+		ServerName:    t.serverName,
+		Insecure:      t.insecure,
+		LoggerFactory: t.loggerFactory,
+	}}.ListenPacket(context.Background(), "udp", "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate TURN relay transport for client %s:%s: %w",
+			clientAddr.Network(), clientAddr.String(), err)
 	}
 	conn.serverConn = serverConn
 
@@ -340,9 +277,6 @@ func (t *Turncat) deleteConnection(conn *connection) {
 		t.log.Warnf("error closing client connection for %s:%s: %s",
 			conn.clientAddr.Network(), conn.clientAddr.String(), err.Error())
 	}
-
-	conn.turnClient.Close()
-	conn.turnConn.Close() //nolint:errcheck
 }
 
 // any error on read/write will delete the connection and terminate the goroutine

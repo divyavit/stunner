@@ -28,7 +28,7 @@ type ClusterConfig struct {
 	// Protocol specifies the protocol to be used with the cluster: UDP (default) or TCP for
 	// direct relay connections to the peers, or TURN-UDP, TURN-TCP, TURN-TLS or TURN-DTLS to
 	// pass the traffic through an upstream TURN server reached over the given transport.
-	// TURN-* protocol clusters implement simple passthrough: peer admission is the upstream
+	// TURN-* protocol clusters relay through an upstream TURN server: peer admission is the upstream
 	// server's job, so they take no endpoints and they admit every peer.
 	Protocol string `json:"protocol,omitempty"`
 	// Endpoints specifies the peers that can be reached via this cluster. Must be empty for

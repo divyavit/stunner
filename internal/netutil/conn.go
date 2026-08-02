@@ -1,8 +1,12 @@
+// Package netutil holds STUNner's low-level networking utilities: the telemetry-instrumented
+// net.Conn/PacketConn/Listener wrappers, the UDP listener socket pool, and the SO_REUSEADDR
+// control. It carries no pion/turn dependency.
 package netutil
 
 // code adopted from github.com/livekit/pkg/telemetry
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -11,6 +15,9 @@ import (
 
 	"github.com/l7mp/stunner/internal/telemetry"
 )
+
+// ErrPortProhibited is returned when a peer endpoint is not admitted by any routed cluster.
+var ErrPortProhibited = errors.New("peer endpoint administratively prohibited")
 
 // AdmitFunc decides whether an inbound connection is admitted for telemetry wrapping.
 // It returns the metric name label and true on success, or "" and false on denial.

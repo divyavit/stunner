@@ -180,6 +180,8 @@ func NewStunner(options Options) *Stunner {
 		Net:           s.net,
 	})
 	rt.Router = router.NewRouter(rt)
+	// DNS re-resolution changes routing verdicts, so it invalidates the routing cache
+	r.SetOnChange(rt.Router.InvalidateCache)
 	rt.QuotaHandler = quota.New(rt)
 	rt.SetForceReady(s.forceReady)
 	s.rt = rt

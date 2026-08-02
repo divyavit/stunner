@@ -12,17 +12,35 @@ import (
 // importing the implementation package into runtime — lets those packages import runtime (and so
 // reach every other runtime service, e.g. the license manager) without an import cycle.
 
-// Router resolves which cluster serves a peer and whether a cluster admits a peer. It is the
-// single authority on routing and admission: matching lives here, not on the cluster objects.
-// Implemented by internal/router.
+// Router finds the cluster that serves a request on a listener. It is deliberately dumb: it looks
+// up the listener's routes and walks them in order, handing each cluster object to a matcher;
+// what a cluster admits is the cluster's business. RoutePeer is the packet-path variant that
+// caches its verdicts; the cache is invalidated explicitly at every point routing state changes
+// (listener and cluster reconcile, DNS re-resolution). Implemented by internal/router.
 type Router interface {
-	// Route returns the name of the cluster on the listener's routes that admits (peer, port)
-	// for the given protocol, or ("", false) if none does. port==0 ignores the port.
-	Route(listener string, routes []string, proto stnrv1.ClusterProtocol, peer net.IP, port int) (string, bool)
-	// Match reports whether the named cluster admits (peer, port). port==0 ignores the port.
-	Match(cluster string, peer net.IP, port int) bool
-	// InvalidateCache drops all cached routing state; call after a config change.
+	// Route returns the first cluster on the listener's routes satisfying the matcher.
+	Route(listener string, match func(Cluster) bool) (Cluster, bool)
+	// RoutePeer returns the name of the first cluster on the listener's routes with the given
+	// protocol that admits (peer, port), caching the verdict. port==0 ignores the port.
+	RoutePeer(listener string, proto stnrv1.ClusterProtocol, peer net.IP, port int) (string, bool)
+	// InvalidateCache drops all cached routing state; call whenever routing state changes.
 	InvalidateCache()
+}
+
+// Cluster is the routing surface a cluster object exposes to the packet path: its name, its
+// protocol, the upstream TURN server it names (nil for direct clusters), and its own admission
+// verdict. Implemented by internal/object.Cluster; reach it by asserting a Registry object.
+type Cluster interface {
+	// Name returns the cluster name.
+	Name() string
+	// Protocol returns the cluster's protocol.
+	Protocol() stnrv1.ClusterProtocol
+	// TURNServer returns the upstream TURN server of a TURN-* protocol cluster, nil otherwise.
+	TURNServer() *stnrv1.TURNServer
+	// Admits reports whether the cluster admits (peer, port) on its own terms: a direct
+	// cluster admits the peers its endpoints name, a TURN-* cluster admits every peer since
+	// admission is then the upstream TURN server's job. port==0 ignores the port.
+	Admits(peer net.IP, port int) bool
 }
 
 // QuotaHandler tracks per-user TURN allocation quotas. CheckAndIncrement reports whether a new

@@ -20,6 +20,10 @@ type DnsResolver interface {
 	Register(domain string) error
 	Unregister(domain string)
 	Lookup(domain string) ([]net.IP, error)
+	// SetOnChange installs a callback fired whenever a background re-resolution changes the
+	// IP set of a registered domain. Routing verdicts are cached against resolved addresses,
+	// so a DNS change is a cache invalidation point. Set it once, before Register is called.
+	SetOnChange(func())
 	Start()
 	Close()
 }
@@ -39,6 +43,7 @@ type serviceEntry struct {
 type dnsResolverImpl struct {
 	ctx      context.Context
 	register map[string]*serviceEntry
+	onChange func()
 	log      logging.LeveledLogger
 }
 
@@ -53,6 +58,9 @@ func NewDnsResolver(name string, logger logging.LoggerFactory) DnsResolver {
 		log:      log,
 	}
 }
+
+// SetOnChange installs the DNS-change callback.
+func (r *dnsResolverImpl) SetOnChange(cb func()) { r.onChange = cb }
 
 // Register adds domain name to the resolver queue for background resolution
 func (r *dnsResolverImpl) Register(domain string) error {
@@ -78,18 +86,20 @@ func (r *dnsResolverImpl) Register(domain string) error {
 	r.register[domain] = e
 
 	r.log.Debugf("starting resolver thread for domain %q", domain)
-	go startResolver(e, r.log)
+	go startResolver(e, r.onChange, r.log)
 
 	return nil
 }
 
 // the resolver goroutine
-func startResolver(e *serviceEntry, log logging.LeveledLogger) {
+func startResolver(e *serviceEntry, onChange func(), log logging.LeveledLogger) {
 	log.Infof("resolver thread starting for domain %q, DNS update interval: %v",
 		e.domain, dnsUpdateInterval)
 
-	if err := doResolve(e); err != nil {
+	if changed, err := doResolve(e); err != nil {
 		log.Debugf("initial resolution failed for domain %q: %s", e.domain, err.Error())
+	} else if changed && onChange != nil {
+		onChange()
 	}
 	log.Tracef("initial resolution ready for domain %q, found %d endpoints", e.domain,
 		len(e.hostNames))
@@ -104,9 +114,13 @@ func startResolver(e *serviceEntry, log logging.LeveledLogger) {
 			return
 		case <-ticker.C:
 			log.Tracef("resolving for domain %q", e.domain)
-			if err := doResolve(e); err != nil {
+			changed, err := doResolve(e)
+			if err != nil {
 				log.Debugf("resolution failed for domain %q: %s",
 					e.domain, err.Error())
+			}
+			if changed && onChange != nil {
+				onChange()
 			}
 			log.Tracef("periodic resolution ready for domain %q, found %d endpoints", e.domain,
 				len(e.hostNames))
@@ -114,12 +128,12 @@ func startResolver(e *serviceEntry, log logging.LeveledLogger) {
 	}
 }
 
-// do the heavy lifting
-func doResolve(e *serviceEntry) error {
+// do the heavy lifting; reports whether the resolved IP set changed
+func doResolve(e *serviceEntry) (bool, error) {
 	if e.cname == "" {
 		cname, err := e.resolver.LookupCNAME(e.ctx, e.domain)
 		if err != nil {
-			return fmt.Errorf("failed to resolve CNAME for domain %q: %s",
+			return false, fmt.Errorf("failed to resolve CNAME for domain %q: %s",
 				e.domain, err.Error())
 		}
 		e.cname = cname
@@ -127,7 +141,7 @@ func doResolve(e *serviceEntry) error {
 
 	hosts, err := e.resolver.LookupHost(e.ctx, e.domain)
 	if err != nil {
-		return fmt.Errorf("failed to resolve CNAME for domain %q: %s",
+		return false, fmt.Errorf("failed to resolve CNAME for domain %q: %s",
 			e.domain, err.Error())
 	}
 
@@ -137,6 +151,7 @@ func doResolve(e *serviceEntry) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
+	old := e.hostNames
 	e.hostNames = make([]net.IP, len(hosts))
 	for i, h := range hosts {
 		n := net.ParseIP(h)
@@ -147,7 +162,18 @@ func doResolve(e *serviceEntry) error {
 		e.hostNames[i] = n
 	}
 
-	return nil
+	// order-sensitive comparison: a reordered answer counts as a change, which at worst
+	// costs a spurious cache invalidation
+	changed := len(old) != len(e.hostNames)
+	if !changed {
+		for i := range old {
+			if !old[i].Equal(e.hostNames[i]) {
+				changed = true
+				break
+			}
+		}
+	}
+	return changed, nil
 }
 
 // Unregister removes a domain name from the resolver queue

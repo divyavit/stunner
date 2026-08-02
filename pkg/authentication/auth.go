@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/pion/turn/v5"
+
+	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
 )
 
 // UsernameSeparator is the separator character used in time-windowed TURN authentication as
@@ -86,4 +88,39 @@ func GetLongTermCredential(username string, sharedSecret string) (string, error)
 // AuthHandler. Re-exported from `pion/turn` so that our callers will have a single import.
 func GenerateAuthKey(username, realm, password string) []byte {
 	return turn.GenerateAuthKey(username, realm, password)
+}
+
+// GenerateCredentials turns an auth config into the credentials a TURN client authenticates with,
+// generating a fresh pair on every call: for "static" the configured username/password, for
+// "ephemeral" a time-windowed credential from the shared secret, valid for the configured
+// lifetime. A nil config and an explicit "none" both yield empty credentials, an anonymous
+// session. This is the client-side counterpart of the AuthHandler: everywhere STUNner dials an
+// upstream TURN server (a TURN-* relay cluster, turncat), the credentials come from here.
+func GenerateCredentials(auth *stnrv1.AuthConfig) (string, string, error) {
+	if auth == nil {
+		return "", "", nil
+	}
+
+	atype, err := stnrv1.NewAuthType(auth.Type)
+	if err != nil {
+		return "", "", err
+	}
+
+	switch atype {
+	case stnrv1.AuthTypeNone:
+		return "", "", nil
+
+	case stnrv1.AuthTypeStatic:
+		return auth.Credentials["username"], auth.Credentials["password"], nil
+
+	case stnrv1.AuthTypeEphemeral:
+		secret, found := auth.Credentials["secret"]
+		if !found {
+			return "", "", fmt.Errorf("no secret found in %s auth config", atype.String())
+		}
+		return turn.GenerateLongTermCredentials(secret, auth.CredentialLifetime())
+
+	default:
+		return "", "", fmt.Errorf("unknown authentication type %q", auth.Type)
+	}
 }

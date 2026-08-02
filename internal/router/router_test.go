@@ -6,29 +6,26 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/l7mp/stunner/internal/object"
 	"github.com/l7mp/stunner/internal/router"
 	"github.com/l7mp/stunner/internal/runtime"
 	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
 	"github.com/l7mp/stunner/pkg/logger"
 )
 
-// fakeReconcilable is a minimal Reconcilable node used to seed the registry with cluster configs.
-type fakeReconcilable struct {
-	name   string
-	typ    runtime.ObjectType
-	config stnrv1.Config
-}
+// fakeListener is a minimal listener node carrying only the routes the Router reads.
+type fakeListener struct{ conf stnrv1.ListenerConfig }
 
-func (o *fakeReconcilable) Name() string             { return o.name }
-func (o *fakeReconcilable) Type() runtime.ObjectType { return o.typ }
-func (o *fakeReconcilable) Start() error             { return nil }
-func (o *fakeReconcilable) Close(_ bool) error       { return nil }
-func (o *fakeReconcilable) GetConfig() stnrv1.Config { return o.config }
-func (o *fakeReconcilable) Status() stnrv1.Status    { return nil }
-func (o *fakeReconcilable) Inspect(_, _ stnrv1.Config, _ *stnrv1.StunnerConfig) (runtime.Action, error) {
+func (l *fakeListener) Name() string             { return l.conf.Name }
+func (l *fakeListener) Type() runtime.ObjectType { return runtime.TypeListener }
+func (l *fakeListener) Start() error             { return nil }
+func (l *fakeListener) Close(_ bool) error       { return nil }
+func (l *fakeListener) GetConfig() stnrv1.Config { return &l.conf }
+func (l *fakeListener) Status() stnrv1.Status    { return nil }
+func (l *fakeListener) Inspect(_, _ stnrv1.Config, _ *stnrv1.StunnerConfig) (runtime.Action, error) {
 	return runtime.ActionNone, nil
 }
-func (o *fakeReconcilable) Reconcile(_ stnrv1.Config) error { return nil }
+func (l *fakeListener) Reconcile(_ stnrv1.Config) error { return nil }
 
 func newRuntime(t *testing.T) *runtime.Runtime {
 	t.Helper()
@@ -38,64 +35,90 @@ func newRuntime(t *testing.T) *runtime.Runtime {
 	return rt
 }
 
-// addCluster registers a static fake cluster so the Router can resolve and match it via GetConfig.
-func addCluster(t *testing.T, rt *runtime.Runtime, name string, proto stnrv1.ClusterProtocol, endpoints ...string) {
+// addCluster registers a real cluster object so the Router can resolve it from the registry and
+// ask it for admission.
+func addCluster(t *testing.T, rt *runtime.Runtime, conf *stnrv1.ClusterConfig) {
 	t.Helper()
-	c := &fakeReconcilable{
-		name: name,
-		typ:  runtime.TypeCluster,
-		config: &stnrv1.ClusterConfig{
-			Name:      name,
-			Type:      stnrv1.ClusterTypeStatic.String(),
-			Protocol:  proto.String(),
-			Endpoints: endpoints,
-		},
-	}
+	c, err := object.NewCluster(conf, rt)
+	require.NoError(t, err)
 	require.NoError(t, rt.Registry.Add(c, nil))
 }
 
-func TestRouterMatch(t *testing.T) {
-	rt := newRuntime(t)
-	addCluster(t, rt, "cluster-a", stnrv1.ClusterProtocolUDP, "10.0.0.0/8")
-
-	require.True(t, rt.Router.Match("cluster-a", net.ParseIP("10.0.0.1"), 0))
-	require.True(t, rt.Router.Match("cluster-a", net.ParseIP("10.1.2.3"), 1234))
-	require.False(t, rt.Router.Match("cluster-a", net.ParseIP("192.168.0.1"), 0))
-	require.False(t, rt.Router.Match("nonexistent", net.ParseIP("10.0.0.1"), 0))
+func addListener(t *testing.T, rt *runtime.Runtime, name string, routes ...string) {
+	t.Helper()
+	l := &fakeListener{conf: stnrv1.ListenerConfig{Name: name, Routes: routes}}
+	require.NoError(t, rt.Registry.Add(l, nil))
 }
 
-func TestRouteWithProtocol(t *testing.T) {
+func TestRoute(t *testing.T) {
+	rt := newRuntime(t)
+	addCluster(t, rt, &stnrv1.ClusterConfig{Name: "cluster-udp",
+		Protocol: stnrv1.ClusterProtocolUDP.String(), Endpoints: []string{"10.0.0.0/8"}})
+	addCluster(t, rt, &stnrv1.ClusterConfig{Name: "turn-cluster",
+		Protocol:   stnrv1.ClusterProtocolTURNUDP.String(),
+		TURNServer: &stnrv1.TURNServer{Address: "1.2.3.4", Port: 3478},
+	})
+	addListener(t, rt, "listener", "nonexistent", "cluster-udp", "turn-cluster")
+
+	// the matcher sees each routed cluster in route order; missing clusters are skipped
+	c, ok := rt.Router.Route("listener", func(c runtime.Cluster) bool {
+		return c.Protocol().IsTURN()
+	})
+	require.True(t, ok)
+	require.Equal(t, "turn-cluster", c.Name())
+	require.NotNil(t, c.TURNServer())
+
+	c, ok = rt.Router.Route("listener", func(c runtime.Cluster) bool {
+		return c.Admits(net.ParseIP("10.0.0.1"), 0)
+	})
+	require.True(t, ok)
+	require.Equal(t, "cluster-udp", c.Name())
+
+	// a TURN cluster admits every peer, so it picks up what the direct cluster rejects
+	c, ok = rt.Router.Route("listener", func(c runtime.Cluster) bool {
+		return c.Admits(net.ParseIP("192.168.0.1"), 0)
+	})
+	require.True(t, ok)
+	require.Equal(t, "turn-cluster", c.Name())
+
+	// unknown listener resolves nothing
+	_, ok = rt.Router.Route("unknown", func(runtime.Cluster) bool { return true })
+	require.False(t, ok)
+}
+
+func TestRoutePeer(t *testing.T) {
 	rt := newRuntime(t)
 	peer := net.ParseIP("10.0.0.1")
 
-	addCluster(t, rt, "cluster-udp", stnrv1.ClusterProtocolUDP, "10.0.0.0/8")
-	addCluster(t, rt, "cluster-tcp", stnrv1.ClusterProtocolTCP, "10.0.0.0/8")
+	addCluster(t, rt, &stnrv1.ClusterConfig{Name: "cluster-udp",
+		Protocol: stnrv1.ClusterProtocolUDP.String(), Endpoints: []string{"10.0.0.0/8"}})
+	addCluster(t, rt, &stnrv1.ClusterConfig{Name: "cluster-tcp",
+		Protocol: stnrv1.ClusterProtocolTCP.String(), Endpoints: []string{"10.0.0.0/8"}})
+	addCluster(t, rt, &stnrv1.ClusterConfig{Name: "turn-cluster",
+		Protocol:   stnrv1.ClusterProtocolTURNUDP.String(),
+		TURNServer: &stnrv1.TURNServer{Address: "1.2.3.4", Port: 3478},
+	})
+	addListener(t, rt, "listener", "cluster-udp", "cluster-tcp", "turn-cluster")
 
-	routes := []string{"cluster-udp", "cluster-tcp"}
+	// protocol-scoped: the same peer resolves per protocol, cached verdicts and all
+	for i := 0; i < 2; i++ {
+		got, ok := rt.Router.RoutePeer("listener", stnrv1.ClusterProtocolUDP, peer, 1234)
+		require.True(t, ok)
+		require.Equal(t, "cluster-udp", got)
 
-	// UDP route resolves only the UDP cluster.
-	got, ok := rt.Router.Route("listener", routes, stnrv1.ClusterProtocolUDP, peer, 1234)
-	require.True(t, ok)
-	require.Equal(t, "cluster-udp", got)
+		got, ok = rt.Router.RoutePeer("listener", stnrv1.ClusterProtocolTCP, peer, 1234)
+		require.True(t, ok)
+		require.Equal(t, "cluster-tcp", got)
 
-	// TCP route resolves only the TCP cluster.
-	got, ok = rt.Router.Route("listener", routes, stnrv1.ClusterProtocolTCP, peer, 1234)
-	require.True(t, ok)
-	require.Equal(t, "cluster-tcp", got)
+		// a TURN-UDP cluster is not a UDP cluster: the data path does not route to it
+		_, ok = rt.Router.RoutePeer("listener", stnrv1.ClusterProtocolUDP,
+			net.ParseIP("192.168.0.1"), 0)
+		require.False(t, ok)
+	}
 
-	// Peer cache is keyed per-protocol: a cached UDP lookup does not collide with TCP.
-	gotUDP, okUDP := rt.Router.Route("listener", routes, stnrv1.ClusterProtocolUDP, peer, 80)
-	gotTCP, okTCP := rt.Router.Route("listener", routes, stnrv1.ClusterProtocolTCP, peer, 80)
-	require.True(t, okUDP)
-	require.True(t, okTCP)
-	require.Equal(t, "cluster-udp", gotUDP)
-	require.Equal(t, "cluster-tcp", gotTCP)
-
-	// First-match wins: two same-protocol clusters, first in route order is selected.
-	addCluster(t, rt, "cluster-udp2", stnrv1.ClusterProtocolUDP, "10.0.0.0/8")
-	routes2 := []string{"cluster-udp", "cluster-udp2"}
+	// negative verdicts are cached too, and explicit invalidation clears them
 	rt.Router.InvalidateCache()
-	got, ok = rt.Router.Route("listener2", routes2, stnrv1.ClusterProtocolUDP, peer, 5000)
+	got, ok := rt.Router.RoutePeer("listener", stnrv1.ClusterProtocolUDP, peer, 80)
 	require.True(t, ok)
 	require.Equal(t, "cluster-udp", got)
 }

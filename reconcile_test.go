@@ -1855,27 +1855,27 @@ var testReconcileDefault = []StunnerReconcileTestConfig{
 			assert.False(t, p(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234},
 				net.ParseIP("3.0.0.0")), "route to 3.0.0.0 fails")
 
-			assert.True(t, c.Route(net.ParseIP("1.1.1.1")), "route to 1.1.1.1 ok")
-			assert.False(t, c.Route(net.ParseIP("1.1.1.2")), "route to 1.1.1.2 fails")
-			assert.True(t, c.Route(net.ParseIP("2.2.2.2")), "route to 2.2.2.2 ok")
-			assert.True(t, c.Route(net.ParseIP("2.128.3.3")), "route to 2.128.3.3 ok")
-			assert.False(t, c.Route(net.ParseIP("3.0.0.0")), "route to 3.0.0.0 fails")
+			assert.True(t, c.Admits(net.ParseIP("1.1.1.1"), 0), "route to 1.1.1.1 ok")
+			assert.False(t, c.Admits(net.ParseIP("1.1.1.2"), 0), "route to 1.1.1.2 fails")
+			assert.True(t, c.Admits(net.ParseIP("2.2.2.2"), 0), "route to 2.2.2.2 ok")
+			assert.True(t, c.Admits(net.ParseIP("2.128.3.3"), 0), "route to 2.128.3.3 ok")
+			assert.False(t, c.Admits(net.ParseIP("3.0.0.0"), 0), "route to 3.0.0.0 fails")
 
-			assert.True(t, c.Match(net.ParseIP("1.1.1.1"), 1), "match 1.1.1.1:1 ok")
-			assert.True(t, c.Match(net.ParseIP("1.1.1.1"), 2), "match 1.1.1.1:2 ok")
-			assert.False(t, c.Match(net.ParseIP("1.1.1.1"), 3), "match 1.1.1.1:3 fails")
+			assert.True(t, c.Admits(net.ParseIP("1.1.1.1"), 1), "match 1.1.1.1:1 ok")
+			assert.True(t, c.Admits(net.ParseIP("1.1.1.1"), 2), "match 1.1.1.1:2 ok")
+			assert.False(t, c.Admits(net.ParseIP("1.1.1.1"), 3), "match 1.1.1.1:3 fails")
 
-			assert.False(t, c.Match(net.ParseIP("1.1.1.2"), 1), "match 1.1.1.2 fails")
+			assert.False(t, c.Admits(net.ParseIP("1.1.1.2"), 1), "match 1.1.1.2 fails")
 
-			assert.True(t, c.Match(net.ParseIP("2.2.2.2"), 3), "match 2.2.2.2:3 ok")
-			assert.True(t, c.Match(net.ParseIP("2.2.2.2"), 4), "match 2.2.2.2:4 ok")
-			assert.False(t, c.Match(net.ParseIP("2.2.2.2"), 5), "match 2.2.2.2:4 fails")
+			assert.True(t, c.Admits(net.ParseIP("2.2.2.2"), 3), "match 2.2.2.2:3 ok")
+			assert.True(t, c.Admits(net.ParseIP("2.2.2.2"), 4), "match 2.2.2.2:4 ok")
+			assert.False(t, c.Admits(net.ParseIP("2.2.2.2"), 5), "match 2.2.2.2:4 fails")
 
-			assert.True(t, c.Match(net.ParseIP("2.128.3.3"), 3), "match 2.128.3.3:3 ok")
-			assert.True(t, c.Match(net.ParseIP("2.128.3.3"), 4), "match 2.128.3.3:4 ok")
-			assert.False(t, c.Match(net.ParseIP("2.128.3.3"), 5), "match 2.128.3.3:5 ok")
+			assert.True(t, c.Admits(net.ParseIP("2.128.3.3"), 3), "match 2.128.3.3:3 ok")
+			assert.True(t, c.Admits(net.ParseIP("2.128.3.3"), 4), "match 2.128.3.3:4 ok")
+			assert.False(t, c.Admits(net.ParseIP("2.128.3.3"), 5), "match 2.128.3.3:5 ok")
 
-			assert.False(t, c.Match(net.ParseIP("3.0.0.0"), 1), "match 3.0.0.0 fails")
+			assert.False(t, c.Admits(net.ParseIP("3.0.0.0"), 1), "match 3.0.0.0 fails")
 		},
 	},
 	{
@@ -2054,26 +2054,25 @@ var testReconcileDefault = []StunnerReconcileTestConfig{
 			assert.Equal(t, stnrv1.ClusterProtocolTCP.String(), tcpConf.Protocol, "tcp cluster protocol")
 			assert.Equal(t, stnrv1.ClusterTypeStatic.String(), tcpConf.Type, "tcp cluster type")
 
-			// The router admits the TCP cluster's endpoints (static IP and CIDR) and rejects others.
+			// The cluster admits its endpoints (static IP and CIDR) and rejects others.
 			router := s.rt.Router
-			assert.True(t, router.Match("tcp-cluster", net.ParseIP("1.1.1.1"), 0), "admit static endpoint")
-			assert.True(t, router.Match("tcp-cluster", net.ParseIP("2.2.2.7"), 0), "admit CIDR endpoint")
-			assert.False(t, router.Match("tcp-cluster", net.ParseIP("9.9.9.9"), 0), "reject non-endpoint")
+			assert.True(t, tcpCluster.Admits(net.ParseIP("1.1.1.1"), 0), "admit static endpoint")
+			assert.True(t, tcpCluster.Admits(net.ParseIP("2.2.2.7"), 0), "admit CIDR endpoint")
+			assert.False(t, tcpCluster.Admits(net.ParseIP("9.9.9.9"), 0), "reject non-endpoint")
 
 			// Route resolution is protocol-scoped: TCP peer -> TCP cluster, UDP peer -> UDP cluster,
 			// and a TCP-cluster endpoint is not reachable over UDP (and vice versa).
-			routes := []string{"tcp-cluster", "udp-cluster"}
-			cl, ok := router.Route("tcp", routes, stnrv1.ClusterProtocolTCP, net.ParseIP("1.1.1.1"), 0)
+			cl, ok := router.RoutePeer("tcp", stnrv1.ClusterProtocolTCP, net.ParseIP("1.1.1.1"), 0)
 			assert.True(t, ok, "TCP route resolves")
 			assert.Equal(t, "tcp-cluster", cl, "TCP route -> tcp cluster")
 
-			cl, ok = router.Route("tcp", routes, stnrv1.ClusterProtocolUDP, net.ParseIP("3.3.3.3"), 0)
+			cl, ok = router.RoutePeer("tcp", stnrv1.ClusterProtocolUDP, net.ParseIP("3.3.3.3"), 0)
 			assert.True(t, ok, "UDP route resolves")
 			assert.Equal(t, "udp-cluster", cl, "UDP route -> udp cluster")
 
-			_, ok = router.Route("tcp", routes, stnrv1.ClusterProtocolTCP, net.ParseIP("3.3.3.3"), 0)
+			_, ok = router.RoutePeer("tcp", stnrv1.ClusterProtocolTCP, net.ParseIP("3.3.3.3"), 0)
 			assert.False(t, ok, "udp-cluster endpoint not reachable over TCP")
-			_, ok = router.Route("tcp", routes, stnrv1.ClusterProtocolUDP, net.ParseIP("1.1.1.1"), 0)
+			_, ok = router.RoutePeer("tcp", stnrv1.ClusterProtocolUDP, net.ParseIP("1.1.1.1"), 0)
 			assert.False(t, ok, "tcp-cluster endpoint not reachable over UDP")
 		},
 	},

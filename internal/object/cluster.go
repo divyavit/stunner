@@ -18,8 +18,8 @@ import (
 
 // Cluster represents a set of upstream peers to which STUNner can relay traffic. Static clusters
 // hold IP/CIDR endpoints; strict-DNS clusters resolve domain names in the background. The cluster
-// holds the reconciled state as an atomic snapshot for the packet path (read by the Router via
-// GetConfig) and owns the strict-DNS domain registration lifecycle.
+// holds the reconciled state as an atomic snapshot for the packet path and owns the strict-DNS
+// domain registration lifecycle.
 type Cluster struct {
 	name     string
 	resolver resolver.DnsResolver
@@ -38,12 +38,14 @@ type Cluster struct {
 }
 
 // clusterState is the immutable snapshot of reconciled cluster data: the single source of truth
-// for a cluster's type, protocol, and endpoint set.
+// for a cluster's type, protocol, endpoint set, and (for TURN-* protocol clusters) the upstream
+// TURN server.
 type clusterState struct {
 	clusterType stnrv1.ClusterType
 	protocol    stnrv1.ClusterProtocol
 	endpoints   []*util.Endpoint
 	domains     []string
+	turnServer  *stnrv1.TURNServer
 }
 
 // NewCluster creates a Cluster object.
@@ -101,6 +103,10 @@ func (c *Cluster) Inspect(old, new stnrv1.Config, _ *stnrv1.StunnerConfig) (runt
 		return runtime.ActionRestart, nil
 	}
 
+	// TURN-related changes (protocol flips to/from/between TURN-*, upstream server address or
+	// credential changes) reconcile rather than restart: live upstream TURN sessions belong to
+	// the allocations, not to the cluster object, and new allocations dial from the published
+	// snapshot.
 	return runtime.ActionReconcile, nil
 }
 
@@ -115,14 +121,9 @@ func (c *Cluster) Reconcile(conf stnrv1.Config) error {
 	c.log.Tracef("reconcile: %s", req.String())
 
 	c.name = req.Name
+	// Validate vouched for the type and the protocol
 	clusterType, _ := stnrv1.NewClusterType(req.Type)
 	protocol, _ := stnrv1.NewClusterProtocol(req.Protocol)
-
-	switch protocol {
-	case stnrv1.ClusterProtocolUDP, stnrv1.ClusterProtocolTCP:
-	default:
-		return fmt.Errorf("unsupported cluster protocol %q", protocol.String())
-	}
 
 	var endpoints []*util.Endpoint
 	var domains []string
@@ -150,6 +151,7 @@ func (c *Cluster) Reconcile(conf stnrv1.Config) error {
 		protocol:    protocol,
 		endpoints:   endpoints,
 		domains:     domains,
+		turnServer:  req.TURNServer,
 	})
 
 	c.rt.Router.InvalidateCache()
@@ -164,6 +166,7 @@ func (c *Cluster) GetConfig() stnrv1.Config {
 	}
 	conf.Protocol = state.protocol.String()
 	conf.Type = state.clusterType.String()
+	conf.TURNServer = state.turnServer
 	switch state.clusterType {
 	case stnrv1.ClusterTypeStatic:
 		conf.Endpoints = make([]string, len(state.endpoints))
@@ -210,14 +213,60 @@ func (c *Cluster) Status() stnrv1.Status {
 	return status
 }
 
-// Route returns true if peer is in the cluster's endpoint set (admission via the Router).
-func (c *Cluster) Route(peer net.IP) bool { return c.Match(peer, 0) }
+// Protocol returns the cluster's protocol from the reconciled snapshot.
+func (c *Cluster) Protocol() stnrv1.ClusterProtocol {
+	if state := c.state.Load(); state != nil {
+		return state.protocol
+	}
+	return stnrv1.ClusterProtocolUnknown
+}
 
-// Match returns true if (peer, port) is admitted by the cluster. If port==0, port is ignored.
-// Matching is implemented once, in the Router; this delegates so callers and tests can ask a
-// cluster directly.
-func (c *Cluster) Match(peer net.IP, port int) bool {
-	return c.rt.Router.Match(c.name, peer, port)
+// TURNServer returns the upstream TURN server of a TURN-* protocol cluster, nil otherwise.
+func (c *Cluster) TURNServer() *stnrv1.TURNServer {
+	if state := c.state.Load(); state != nil {
+		return state.turnServer
+	}
+	return nil
+}
+
+// Admits reports whether the cluster admits (peer, port), on the cluster's own terms: a TURN-*
+// cluster admits every peer, since admission is then the upstream TURN server's job; a static
+// cluster admits the peers its endpoints name; a strict-DNS cluster admits the addresses its
+// domains resolve to (ports are not checked, domains carry none). port==0 ignores the port.
+func (c *Cluster) Admits(peer net.IP, port int) bool {
+	state := c.state.Load()
+	if state == nil {
+		return false
+	}
+
+	if state.protocol.IsTURN() {
+		return true
+	}
+
+	switch state.clusterType {
+	case stnrv1.ClusterTypeStatic:
+		for _, e := range state.endpoints {
+			if e.Match(peer, port) {
+				return true
+			}
+		}
+	case stnrv1.ClusterTypeStrictDNS:
+		if c.resolver == nil {
+			return false
+		}
+		for _, d := range state.domains {
+			hosts, err := c.resolver.Lookup(d)
+			if err != nil {
+				continue
+			}
+			for _, h := range hosts {
+				if h.Equal(peer) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // strictDNSDomains returns the cluster's strict-DNS domains from the current snapshot, or nil

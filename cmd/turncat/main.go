@@ -7,10 +7,8 @@ import (
 	"os/signal"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5"
 	flag "github.com/spf13/pflag"
 
 	cliopt "k8s.io/cli-runtime/pkg/genericclioptions"
@@ -30,11 +28,10 @@ const usage = `turncat [options] <client-addr> <turn-server-addr> <peer-addr>
 `
 
 var (
-	k8sConfigFlags  *cliopt.ConfigFlags
-	cdsConfigFlags  *cdsclient.CDSConfigFlags
-	log             logging.LeveledLogger
-	defaultDuration time.Duration
-	loggerFactory   logger.LoggerFactory
+	k8sConfigFlags *cliopt.ConfigFlags
+	cdsConfigFlags *cdsclient.CDSConfigFlags
+	log            logging.LeveledLogger
+	loggerFactory  logger.LoggerFactory
 
 	version    = "dev"
 	commitHash = "n/a"
@@ -48,7 +45,6 @@ func main() {
 	}
 
 	os.Args[0] = "turncat"
-	defaultDuration, _ = time.ParseDuration("1h")
 
 	// Kubernetes config flags
 	k8sConfigFlags = cliopt.NewConfigFlags(true)
@@ -95,13 +91,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Debug("generating STUNner authentication client")
-	authGen, err := getAuth(config)
-	if err != nil {
-		log.Errorf("could not create STUNner authentication client: %s", err.Error())
-		os.Exit(1)
-	}
-
 	log.Debug("generating STUNner URI")
 	stunnerURI, err := getStunnerURI(config)
 	if err != nil {
@@ -114,8 +103,7 @@ func main() {
 		ListenerAddr:  flag.Arg(0),
 		ServerAddr:    stunnerURI,
 		PeerAddr:      flag.Arg(2),
-		Realm:         config.Auth.Realm,
-		AuthGen:       authGen,
+		Auth:          &config.Auth,
 		ServerName:    serverName,
 		InsecureMode:  *insecure,
 		LoggerFactory: loggerFactory,
@@ -248,45 +236,6 @@ func getStunnerConfFromCLI(def string) (*stnrv1.StunnerConfig, error) {
 	conf.Listeners[0].PublicPort = u.Port
 
 	return conf, nil
-}
-
-func getAuth(config *stnrv1.StunnerConfig) (stunner.AuthGen, error) {
-	auth := config.Auth
-	atype, err := stnrv1.NewAuthType(auth.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	switch atype {
-	case stnrv1.AuthTypeEphemeral:
-		s, found := auth.Credentials["secret"]
-		if !found {
-			return nil, fmt.Errorf("cannot find shared secret for %s authentication",
-				auth.Type)
-		}
-		return func() (string, string, error) {
-			return turn.GenerateLongTermCredentials(s, defaultDuration)
-		}, nil
-
-	case stnrv1.AuthTypeStatic:
-		u, found := auth.Credentials["username"]
-		if !found {
-			return nil, fmt.Errorf("cannot find username for %s authentication",
-				auth.Type)
-		}
-
-		p, found := auth.Credentials["password"]
-		if !found {
-			return nil, fmt.Errorf("cannot find password for %s authentication",
-				auth.Type)
-		}
-
-		return func() (string, string, error) { return u, p, nil }, nil
-
-	default:
-		return nil, fmt.Errorf("unknown authentication type %q",
-			auth.Type)
-	}
 }
 
 func getStunnerURI(config *stnrv1.StunnerConfig) (string, error) {

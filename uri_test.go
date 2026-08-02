@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,4 +160,78 @@ func TestHasUnbracketedIPv6(t *testing.T) {
 			assert.Equal(t, tc.want, hasUnbracketedIPv6(&url.URL{Host: tc.host}))
 		})
 	}
+}
+
+func TestURITURNServer(t *testing.T) {
+	staticAuth := func(u, p string) *stnrv1.AuthConfig {
+		// what a validated block looks like: type normalized, default realm injected
+		return &stnrv1.AuthConfig{Type: "static", Realm: stnrv1.DefaultRealm,
+			Credentials: map[string]string{"username": u, "password": p}}
+	}
+	for _, c := range []struct {
+		name  string
+		uri   string
+		want  stnrv1.TURNServer
+		proto stnrv1.Protocol
+		err   bool
+	}{
+		{
+			name:  "turn-udp with credentials",
+			uri:   "turn://user:pass@1.2.3.4:3478?transport=udp",
+			want:  stnrv1.TURNServer{Address: "1.2.3.4", Port: 3478, Auth: staticAuth("user", "pass")},
+			proto: stnrv1.ProtocolTURNUDP,
+		},
+		{
+			name:  "turn-tcp without credentials",
+			uri:   "turn://1.2.3.4:3478?transport=tcp",
+			want:  stnrv1.TURNServer{Address: "1.2.3.4", Port: 3478},
+			proto: stnrv1.ProtocolTURNTCP,
+		},
+		{
+			name:  "turns maps to TLS and defaults the port",
+			uri:   "turns://1.2.3.4?transport=tcp",
+			want:  stnrv1.TURNServer{Address: "1.2.3.4", Port: 443},
+			proto: stnrv1.ProtocolTURNTLS,
+		},
+		{
+			name:  "bracketed ipv6 round-trips to a bare host",
+			uri:   "turn://[2001:db8::1]:3478?transport=udp",
+			want:  stnrv1.TURNServer{Address: "2001:db8::1", Port: 3478},
+			proto: stnrv1.ProtocolTURNUDP,
+		},
+		{
+			name: "a plain transport URI is not a TURN server",
+			uri:  "udp://1.2.3.4:3478",
+			err:  true,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			u, err := ParseURI(c.uri)
+			assert.NoError(t, err, "ParseURI")
+
+			s, proto, err := u.TURNServer()
+			if c.err {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, c.want, *s)
+			assert.Equal(t, c.proto, proto)
+
+			// a credential-less URI yields a server with no auth block, not an empty one
+			if c.want.Auth == nil {
+				assert.Nil(t, s.Auth)
+			}
+		})
+	}
+}
+
+func TestURITURNServerHostPortRoundTrip(t *testing.T) {
+	// an IPv6 URI is bracketed, the server holds the bare host, and HostPort brackets it again
+	u, err := ParseURI("turn://[2001:db8::1]:3478?transport=udp")
+	assert.NoError(t, err)
+	s, _, err := u.TURNServer()
+	assert.NoError(t, err)
+	assert.Equal(t, "2001:db8::1", s.Address, "bare host")
+	assert.Equal(t, "[2001:db8::1]:3478", s.HostPort(), "re-bracketed")
 }

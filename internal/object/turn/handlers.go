@@ -8,7 +8,6 @@ import (
 	"github.com/pion/turn/v5"
 
 	"github.com/l7mp/stunner/internal/offload"
-	"github.com/l7mp/stunner/internal/router"
 	objruntime "github.com/l7mp/stunner/internal/runtime"
 	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
 	a12n "github.com/l7mp/stunner/pkg/authentication"
@@ -94,18 +93,15 @@ func NewPermissionHandler(name string, rt *objruntime.Runtime, log logging.Level
 		peerIP := peer.String()
 		log.Tracef("permission handler for listener %q: client %q, peer %q", name,
 			src.String(), peerIP)
-		conf, ok := rt.GetConfig(objruntime.TypeListener, name).(*stnrv1.ListenerConfig)
-		if !ok || conf == nil {
-			log.Infof("permission denied on listener %q for client %q to peer %s: listener config unavailable",
-				name, src.String(), peerIP)
-			return false
-		}
 
-		// Grant if the peer is routable via *any* cluster on the listener's routes.
-		cluster, ok := router.RouteAny(rt, name, conf.Routes, peer)
-		if ok {
+		// Grant if *any* routed cluster admits the peer. Each cluster admits on its own
+		// terms: a direct cluster admits the peers its endpoints name, a TURN-* cluster
+		// admits every peer, since admission is then the upstream TURN server's job.
+		if c, ok := rt.Router.Route(name, func(c objruntime.Cluster) bool {
+			return c.Admits(peer, 0)
+		}); ok {
 			log.Debugf("permission granted on listener %q for client %q to peer %s via cluster %q",
-				name, src.String(), peerIP, cluster)
+				name, src.String(), peerIP, c.Name())
 			return true
 		}
 
@@ -172,10 +168,10 @@ func NewEventHandler(name string, rt *objruntime.Runtime, log logging.LeveledLog
 		},
 		OnPermissionCreated: func(src, dst net.Addr, proto, username, realm string, relayAddr net.Addr, peer net.IP) {
 			cluster := ""
-			if conf, ok := rt.GetConfig(objruntime.TypeListener, name).(*stnrv1.ListenerConfig); ok && conf != nil {
-				if c, ok := router.RouteAny(rt, name, conf.Routes, peer); ok {
-					cluster = c
-				}
+			if c, ok := rt.Router.Route(name, func(c objruntime.Cluster) bool {
+				return c.Admits(peer, 0)
+			}); ok {
+				cluster = c.Name()
 			}
 			log.Debugf("permission created: client=%s, relay-addr=%s, peer=%s, cluster=%s",
 				dumpClient(src, dst, proto, username, realm), relayAddr.String(), peer.String(), cluster)
@@ -190,14 +186,19 @@ func NewEventHandler(name string, rt *objruntime.Runtime, log logging.LeveledLog
 			if !ok {
 				return
 			}
-			if conf, ok := rt.GetConfig(objruntime.TypeListener, name).(*stnrv1.ListenerConfig); ok && conf != nil {
-				if c, ok := rt.Router.Route(name, conf.Routes, stnrv1.ClusterProtocolUDP, peerAddr.IP, 0); ok {
-					cluster = c
-				}
+			if cl, ok := rt.Router.RoutePeer(name, stnrv1.ClusterProtocolUDP, peerAddr.IP, 0); ok {
+				cluster = cl
 			}
 			log.Debugf("channel created: listener=%s, cluster=%s, client=%s, relay-addr=%s, peer=%s, channel-num=%d",
 				name, cluster, dumpClient(src, dst, proto, username, realm),
 				relayAddr.String(), peer.String(), chanNum)
+			if _, ok := rt.Router.Route(name, isTURNCluster); ok {
+				// the flow relays through an upstream TURN session in userspace: a
+				// kernel offload bypass would black-hole it
+				log.Debugf("skipping offload for channel to peer %s on TURN-cluster listener %s",
+					peer.String(), name)
+				return
+			}
 			client := offload.Connection{RemoteAddr: src, LocalAddr: dst, Protocol: proto, ChannelID: uint32(chanNum)}
 			peerConn := offload.Connection{RemoteAddr: peer, LocalAddr: relayAddr, Protocol: proto}
 			if err := rt.OffloadEngine.Upsert(client, peerConn, name, cluster); err != nil {

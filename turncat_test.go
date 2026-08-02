@@ -10,7 +10,6 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/transport/v4/test"
-	"github.com/pion/turn/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,14 +22,10 @@ var turncatTestLoglevel string = "all:ERROR"
 // var turncatTestLoglevel string = "all:TRACE"
 
 var sharedSecret = "my-secret"
-var defaultDuration = "10m"
-var longtermAuthGen = func() (string, string, error) {
-	d, _ := time.ParseDuration(defaultDuration)
-	return turn.GenerateLongTermCredentials(sharedSecret, d)
-}
-var plaintextAuthGen = func() (string, string, error) {
-	return "user1", "passwd1", nil
-}
+var ephemeralAuth = &stnrv1.AuthConfig{Type: "ephemeral", Lifetime: "10m",
+	Credentials: map[string]string{"secret": sharedSecret}}
+var staticAuth = &stnrv1.AuthConfig{Type: "static",
+	Credentials: map[string]string{"username": "user1", "password": "passwd1"}}
 
 type turncatEchoTestConfig struct {
 	t *testing.T
@@ -152,28 +147,28 @@ func TestTurncatPlaintext(t *testing.T) {
 			ListenerAddr:  "udp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=udp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       plaintextAuthGen,
+			Auth:          staticAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "udp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=tcp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       plaintextAuthGen,
+			Auth:          staticAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "tcp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=udp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       plaintextAuthGen,
+			Auth:          staticAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "tcp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=tcp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       plaintextAuthGen,
+			Auth:          staticAuth,
 			LoggerFactory: logFactory,
 		},
 	}
@@ -266,28 +261,28 @@ func TestTurncatLongterm(t *testing.T) {
 			ListenerAddr:  "udp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=udp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       longtermAuthGen,
+			Auth:          ephemeralAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "udp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=tcp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       longtermAuthGen,
+			Auth:          ephemeralAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "tcp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=udp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       longtermAuthGen,
+			Auth:          ephemeralAuth,
 			LoggerFactory: logFactory,
 		},
 		{
 			ListenerAddr:  "tcp://127.0.0.1:25000",
 			ServerAddr:    "turn://127.0.0.1:23478?transport=tcp",
 			PeerAddr:      "udp://localhost:25678",
-			AuthGen:       longtermAuthGen,
+			Auth:          ephemeralAuth,
 			LoggerFactory: logFactory,
 		},
 	}

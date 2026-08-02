@@ -138,7 +138,7 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 		ListenerAddr:  fmt.Sprintf("%s://127.0.0.1:25000", clientProto),
 		ServerAddr:    stunnerURI,
 		PeerAddr:      "udp://localhost:65432",
-		AuthGen:       plaintextAuthGen,
+		Auth:          staticAuth,
 		LoggerFactory: loggerFactory,
 		InsecureMode:  true,
 	}
