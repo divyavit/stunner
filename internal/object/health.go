@@ -20,7 +20,9 @@ import (
 type Health struct {
 	endpoint string
 	server   *http.Server
-	servAddr net.Addr
+	// servAddr is the listen address the running server was started with (may be host-less,
+	// like ":8086"), used to skip a restart when the endpoint is unchanged.
+	servAddr string
 	mux      *http.ServeMux
 	dryRun   bool
 
@@ -129,7 +131,7 @@ func (h *Health) Start() error {
 	}
 
 	addr, _ := getAddrFromURL(h.endpoint, stnrv1.DefaultHealthCheckPort)
-	if h.servAddr != nil && h.servAddr.String() == addr {
+	if h.servAddr != "" && h.servAddr == addr {
 		// Server is already up at the desired address.
 		return nil
 	}
@@ -141,7 +143,7 @@ func (h *Health) Start() error {
 	if err != nil {
 		return fmt.Errorf("cannot start healthcheck server at http://%s: %w", addr, err)
 	}
-	h.servAddr = ln.Addr()
+	h.servAddr = addr
 
 	go func() {
 		if err := h.server.Serve(ln); err != nil {
@@ -165,7 +167,7 @@ func (h *Health) Close(_ bool) error {
 		h.log.Debugf("error closing healthcheck server: %s", err.Error())
 	}
 	h.server = nil
-	h.servAddr = nil
+	h.servAddr = ""
 	return nil
 }
 

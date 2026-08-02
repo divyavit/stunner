@@ -1,13 +1,18 @@
 package object_test
 
 import (
+	"fmt"
+	"net"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/l7mp/stunner/internal/object"
+	"github.com/l7mp/stunner/internal/resolver"
 	"github.com/l7mp/stunner/internal/runtime"
 	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/pkg/logger"
 )
 
 func TestAdminObjectSemantics(t *testing.T) {
@@ -72,4 +77,38 @@ func TestAdminObjectSemantics(t *testing.T) {
 			},
 		},
 	})
+}
+
+// TestHealthServerBindsBothFamilies pins the endpoint-URI handling of the health/metrics servers
+// through the exported API: the operator's default host-less endpoint ("http://:8086") must bind
+// the unspecified address of every available family, IPv6-only clusters included, and a repeated
+// Start with an unchanged endpoint must not try to re-bind the port.
+func TestHealthServerBindsBothFamilies(t *testing.T) {
+	log := logger.NewLoggerFactory(stnrv1.DefaultLogLevel)
+	r := resolver.NewMockResolver(map[string][]string{}, log)
+	rt := runtime.New(runtime.Config{Logger: log, Resolver: r})
+
+	// grab a free port for the host-less endpoint
+	ln, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	require.NoError(t, ln.Close())
+
+	h, err := object.NewHealth(&object.HealthConfig{Endpoint: fmt.Sprintf("http://:%d", port)}, rt)
+	require.NoError(t, err)
+	require.NoError(t, h.Start())
+	defer h.Close(false) //nolint:errcheck
+	require.NoError(t, h.Start(), "repeated Start with an unchanged endpoint is a no-op")
+
+	hosts := []string{"127.0.0.1"}
+	if l6, err := net.Listen("tcp6", "[::1]:0"); err == nil {
+		require.NoError(t, l6.Close())
+		hosts = append(hosts, "[::1]")
+	}
+	for _, host := range hosts {
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/live", host, port))
+		require.NoErrorf(t, err, "GET /live over %s", host)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.NoError(t, resp.Body.Close())
+	}
 }

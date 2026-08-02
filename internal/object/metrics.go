@@ -20,7 +20,9 @@ import (
 type Metrics struct {
 	endpoint string
 	server   *http.Server
-	servAddr net.Addr
+	// servAddr is the listen address the running server was started with (may be host-less,
+	// like ":8080"), used to skip a restart when the endpoint is unchanged.
+	servAddr string
 	dryRun   bool
 
 	// conf is the atomic snapshot read via Admin.GetConfig on the allocation path.
@@ -117,7 +119,7 @@ func (m *Metrics) Start() error {
 		return nil
 	}
 	addr, path := getAddrFromURL(m.endpoint, stnrv1.DefaultMetricsPort)
-	if m.servAddr != nil && m.servAddr.String() == addr {
+	if m.servAddr != "" && m.servAddr == addr {
 		return nil
 	}
 
@@ -130,7 +132,7 @@ func (m *Metrics) Start() error {
 	if err != nil {
 		return fmt.Errorf("cannot start metrics server at http://%s%s: %w", addr, path, err)
 	}
-	m.servAddr = ln.Addr()
+	m.servAddr = addr
 
 	go func() {
 		if err := m.server.Serve(ln); err != nil {
@@ -154,6 +156,6 @@ func (m *Metrics) Close(_ bool) error {
 		m.log.Debugf("error closing metrics server: %s", err.Error())
 	}
 	m.server = nil
-	m.servAddr = nil
+	m.servAddr = ""
 	return nil
 }

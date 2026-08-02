@@ -2,6 +2,7 @@ package object
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -158,7 +159,8 @@ func (a *Admin) LogLevel() string {
 	return ""
 }
 
-// getAddrFromURL is reused by Health and Metrics for parsing URI-style endpoints.
+// getAddrFromURL is reused by Health and Metrics for parsing URI-style endpoints. A host-less
+// endpoint (like the default "http://:8086") yields a host-less listen address (":8086").
 func getAddrFromURL(e string, defaultPort int) (string, string) {
 	if e == "" {
 		return "", ""
@@ -167,15 +169,11 @@ func getAddrFromURL(e string, defaultPort int) (string, string) {
 	if err != nil {
 		return "", ""
 	}
-	addr := u.Hostname()
-	if addr == "" {
-		addr = "0.0.0.0"
-	}
 	port := u.Port()
 	if port == "" {
 		port = strconv.Itoa(defaultPort)
 	}
-	addr = addr + ":" + port
+	addr := net.JoinHostPort(u.Hostname(), port)
 
 	path := u.EscapedPath()
 	if path == "" {
