@@ -11,6 +11,12 @@ import (
 	flag "github.com/spf13/pflag"
 	cliopt "k8s.io/cli-runtime/pkg/genericclioptions"
 
+	// Register the bundled Mozilla CA roots as the fallback verification pool: the stunnerd
+	// image is built from scratch with no system CA bundle, and upstream turn-tls/turn-dtls
+	// servers and wss:// config origins must still verify. A system bundle, when present,
+	// takes precedence.
+	_ "golang.org/x/crypto/x509roots/fallback"
+
 	"github.com/l7mp/stunner"
 	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
 	"github.com/l7mp/stunner/pkg/buildinfo"

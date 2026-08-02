@@ -1,11 +1,11 @@
 ###########
 # BUILD
-FROM golang:1.26-alpine as builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY *.go ./
 COPY internal/ internal/
@@ -13,7 +13,7 @@ COPY pkg/ pkg/
 
 COPY cmd/ cmd/
 
-COPY .git ./
+COPY .git ./.git/
 COPY Makefile ./
 RUN apk add --no-cache git make
 
