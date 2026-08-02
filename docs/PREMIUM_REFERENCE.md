@@ -8,6 +8,8 @@ STUNner's premium features are designed to help medium to large scale enterprise
 1. [STUN server mode](#stun-server-mode)
 1. [Deploying into a DaemonSet](#deploying-into-a-daemonset)
 1. [Relay address discovery](#relay-address-discovery)
+1. [TCP routes](#tcp-routes)
+1. [Dual-stack TURN](#dual-stack-turn)
 1. [TURN offload](#turn-offload)
 
 ## User quota
@@ -161,6 +163,56 @@ Below is the set of steps to enable relay address discovery:
    ```
 
    Note that depending on your Kubernetes provider's platform your nodes may run without a public IP, or host-networking may not be available at all. Symmetric ICE mode is still be usable as a fallback in such cases.
+
+## TCP routes
+
+**Feature:** `TCPRoute`. **Availability:** member and enterprise tiers.
+
+STUNner routes clients to backends over UDP by default: a UDPRoute admits a set of backend Services and `stunnerd` relays client traffic to them in UDP. Some backends, however, speak only TCP. The `TCPRoute` resource is the TCP counterpart of the UDPRoute: it admits the same kinds of backends with the same port-range semantics, but the relay leg towards the backend is a TCP connection.
+
+```yaml
+apiVersion: stunner.l7mp.io/v1
+kind: TCPRoute
+metadata:
+  name: media-plane-route
+  namespace: stunner
+spec:
+  parentRefs:
+    - name: tcp-gateway
+  rules:
+    - backendRefs:
+        - name: media-server-pool
+          namespace: media-plane
+```
+
+See the [TCPRoute reference](GATEWAY.md#tcproute) for the full spec. There is no protocol conversion anywhere: the client's allocation fixes the protocol of the relay leg, so a TCP backend is reachable only through an [RFC 6062](https://datatracker.ietf.org/doc/html/rfc6062) TCP allocation. Browsers do not implement RFC 6062, so TCP backends are not reachable from a browser's relay candidates.
+
+TCP routing is available in your tier if the `TCPRoute` feature is enabled in the license status (recall, the status can be obtained using [`stunnerctl license`](/docs/cmd/stunnerctl.md#license-status)). Without the feature the operator still accepts your TCPRoutes and maintains their status, but it renders no dataplane cluster for them and reports the reason in the route's `ResolvedRefs` status condition:
+
+```console
+kubectl get tcproute media-plane-route -o jsonpath='{.status.parents[0].conditions}'
+```
+
+```console
+[..., {"type":"ResolvedRefs","status":"False","reason":"UnsupportedValue",
+       "message":"route kind not available in the current license tier"}]
+```
+
+## Dual-stack TURN
+
+**Feature:** `DualStack`. **Availability:** member and enterprise tiers.
+
+A TURN server that is reachable over both IPv4 and IPv6 must hand each client a *relayed transport address in the client's own address family*: an IPv6 client that ingresses over the IPv6 VIP needs an IPv6 relay to reach IPv6 peers. Kubernetes preserves the address family end-to-end (a dual-stack Service gets one VIP and one EndpointSlice per family, and kube-proxy never cross-connects families), so the missing piece is for `stunnerd` to know, and advertise, one relay address per family.
+
+The `DualStack` feature wires this up:
+
+- the STUNner dataplane pods receive their pod IPs for *both* families and advertise a relay address matching each client's family;
+- the public addresses of a Gateway are advertised per family, so the ICE server list your clients receive contains an entry per family;
+- the LoadBalancer Service exposing a Gateway requests `ipFamilyPolicy: PreferDualStack`, so a dual-stack cluster assigns a per-family VIP. `PreferDualStack`, unlike `RequireDualStack`, degrades gracefully to single-stack on a single-stack cluster rather than failing.
+
+Dual-stack TURN is available in your tier if the `DualStack` feature is enabled in the license status (recall, the status can be obtained using [`stunnerctl license`](/docs/cmd/stunnerctl.md#license-status)). Without the feature STUNner runs single-stack, exactly as before. Note that single-stack means the cluster's own address family, whichever it is: on an IPv6-only cluster STUNner runs single-stack IPv6 without any license requirement, since the pod IP, the Service VIP and the relay address are then all IPv6 to begin with. The `DualStack` feature is only needed to serve *both* families at once.
+
+Note that the address family is chosen by the *client's* ICE agent when it picks which of the advertised ICE server URLs to contact, and the family of that connection then selects the family of the relay it gets. Make sure your cluster is actually dual-stack (`--feature-gates=IPv6DualStack`, dual-stack pod and service CIDRs) and that your cloud load-balancer controller forwards the IPv6 VIP over IPv6; this last hop is the only one Kubernetes does not guarantee.
 
 ## TURN offload
 

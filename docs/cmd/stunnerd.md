@@ -94,6 +94,42 @@ static:
       key: "my-key.key"
 ```
 
+### Relay addresses
+
+A listener's `address` is the relayed transport address `stunnerd` advertises to clients. A dual-stack deployment needs one per address family: use `addresses` to hand `stunnerd` a list (typically the pod's IPs, one per family, via `$STUNNER_ADDRS`) and it will advertise the relay address matching each client's own address family. Likewise, `public_address`/`public_port` name the single address clients reach the listener at, while `public_addresses` carries one entry per family. IPv6 addresses are written unbracketed in these fields.
+
+``` yaml
+    - name: stunnerd-udp
+      address: "$STUNNER_ADDR"
+      addresses: ["$STUNNER_ADDRS"]
+      protocol: turn-udp
+      port: 3478
+      public_address: "1.2.3.4"
+      public_addresses: ["1.2.3.4", "2001:db8::1"]
+```
+
+### TURN relay clusters
+
+A cluster with a plain protocol (`udp`, `tcp`) relays a client's traffic directly to the peers admitted by its `endpoints`. A cluster with a TURN protocol (`turn-udp`, `turn-tcp`, `turn-tls`, `turn-dtls`) instead relays the traffic through an upstream TURN server named by its `turnServer` block, which is what `turncat`'s tunnel mode does, except that `stunnerd` is the tunnel endpoint.
+
+``` yaml
+  clusters:
+    - name: upstream-turn
+      protocol: turn-tcp
+      turnServer:
+        address: turn.example.com
+        port: 3478
+        auth:
+          type: static
+          credentials:
+            username: user
+            password: pass
+```
+
+The optional `auth` block tells `stunnerd` how to authenticate to the upstream server, with the exact same syntax it uses for its own clients: type `static` takes a fixed `username`/`password` pair, type `ephemeral` takes a `secret` from which a time-limited credential is generated per allocation. Omit the block for an upstream server that takes no credentials. For the `turn-tls` and `turn-dtls` transports, `insecure: true` skips the verification of the upstream server's TLS certificate.
+
+## Performance optimization
+
 STUNner can run multiple parallel readloops for TURN/UDP listeners, which allows it to scale to practically any number of CPUs and brings massive performance improvements for UDP workloads. This can be achieved by creating a configurable number of UDP readloop threads over the same TURN listener. The kernel will load-balance allocations across the readloops per the IP 5-tuple and so the same allocation will always stay at the same CPU, which is important for correct TURN operations.
 
 The feature is exposed via the command line flag `--udp-thread-num=<THREAD_NUMBER>`. The below starts `stunnerd` watching the config file in `/etc/stunnerd/stunnerd.conf` using 32 parallel UDP readloops (the default is 16).

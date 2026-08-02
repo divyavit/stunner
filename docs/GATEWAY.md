@@ -319,6 +319,34 @@ Backend reference configuration is as follows:
 
 UDPRoute resources are safe for modification: `stunnerd` knows how to reconcile modified routes without restarting any listeners/TURN servers.
 
+## TCPRoute
+
+TCPRoute is the TCP counterpart of the UDPRoute: same spec, same backend kinds, same port-range semantics, but the relay leg towards the backend is a TCP connection instead of a UDP flow. Use it when the backend service speaks TCP.
+
+```yaml
+apiVersion: stunner.l7mp.io/v1
+kind: TCPRoute
+metadata:
+  name: media-plane-route
+  namespace: stunner
+spec:
+  parentRefs:
+    - name: tcp-gateway
+  rules:
+    - backendRefs:
+        - name: media-server-pool
+          namespace: media-plane
+```
+
+The `spec` and the backend reference fields are identical to those of the [UDPRoute](#udproute). As with UDPRoutes, the official Gateway API TCPRoute resource can be used instead of STUNner's own; a same-name STUNner-native TCPRoute masks the official one.
+
+There is no protocol conversion anywhere in STUNner: the protocol of the relay leg is fixed by the client's TURN allocation, so a TCP backend is reachable only over an [RFC 6062](https://datatracker.ietf.org/doc/html/rfc6062) TCP allocation. Browsers do not implement RFC 6062, so TCP backends cannot be reached from a browser's relay candidates.
+
+> [!NOTE]
+> Rendering a TCPRoute into a dataplane cluster is a [premium feature](PREMIUM_REFERENCE.md#tcp-routes). Without a license the operator still accepts your TCPRoutes and maintains their status, but no cluster is rendered for them and the `ResolvedRefs` status condition reports the reason.
+
+TCPRoute resources are safe for modification, exactly like UDPRoutes.
+
 ## StaticService
 
 When the target backend of a UDPRoute is running *inside* Kubernetes then the backend is always a proper Kubernetes Service. However, when the target is deployed *outside* Kubernetes then there is no Kubernetes Service that could be configured as a backend. This is particularly problematic in the cases when STUNner is used as a public TURN service. For such deployments, the StaticService resource provides a way to assign a routable IP address range to a UDPRoute.
@@ -355,7 +383,7 @@ spec:
           name: static-svc
 ```
 
-The StaticService `spec.prefixes` must be a list of proper IPv4 prefixes: any IP address in any of the listed prefixes will be whitelisted. Use the single prefix `0.0.0.0/0` to provide wildcard access via an UDPRoute.
+The StaticService `spec.prefixes` must be a list of proper IPv4 or IPv6 prefixes: any IP address in any of the listed prefixes will be whitelisted. Note that a prefix admits only peers of its own address family, so use the prefix `0.0.0.0/0` to provide wildcard access via an UDPRoute, and add `::/0` next to it on an IPv6-only or dual-stack cluster.
 
 > [!WARNING]
 >
