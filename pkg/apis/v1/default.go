@@ -1,5 +1,7 @@
 package v1
 
+import "time"
+
 // stunnerd defaults
 const (
 	ApiVersion                    string = "v1"
@@ -10,6 +12,7 @@ const (
 	DefaultLogLevel                      = "all:INFO"
 	DefaultRealm                         = "stunner.l7mp.io"
 	DefaultAuthType                      = "static"
+	DefaultCredentialLifetime            = time.Hour
 	DefaultMinRelayPort           int    = 1
 	DefaultMaxRelayPort           int    = 1<<16 - 1
 	DefaultClusterType                   = "STATIC"

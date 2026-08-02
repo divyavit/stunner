@@ -1,9 +1,12 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/l7mp/stunner/internal/util"
@@ -22,11 +25,61 @@ type ClusterConfig struct {
 	// Type specifies the cluster address resolution policy, either STATIC or
 	// STRICT_DNS. Default is "STATIC".
 	Type string `json:"type,omitempty"`
-	// Protocol specifies the protocol to be used with the cluster, either UDP (default) or TCP
-	// (not implemented yet).
+	// Protocol specifies the protocol to be used with the cluster: UDP (default) or TCP for
+	// direct relay connections to the peers, or TURN-UDP, TURN-TCP, TURN-TLS or TURN-DTLS to
+	// pass the traffic through an upstream TURN server reached over the given transport.
+	// TURN-* protocol clusters implement simple passthrough: peer admission is the upstream
+	// server's job, so they take no endpoints and they admit every peer.
 	Protocol string `json:"protocol,omitempty"`
-	// Endpoints specifies the peers that can be reached via this cluster.
+	// Endpoints specifies the peers that can be reached via this cluster. Must be empty for
+	// TURN-* protocol clusters.
 	Endpoints []string `json:"endpoints,omitempty"`
+	// TURNServer specifies the upstream TURN server for TURN-* protocol clusters. Mandatory
+	// for TURN-* protocols, must be omitted otherwise.
+	TURNServer *TURNServer `json:"turnServer,omitempty"`
+}
+
+// TURNServer describes an upstream TURN server that a TURN-* protocol cluster relays through.
+type TURNServer struct {
+	// Address is the IP address or DNS name of the TURN server. Address is mandatory.
+	Address string `json:"address"`
+	// Port is the port of the TURN server. Port is mandatory.
+	Port int `json:"port"`
+	// Auth specifies how to authenticate to the TURN server: "static" with a fixed
+	// username/password pair, or "ephemeral" with a shared secret from which a time-limited
+	// credential is generated per allocation, exactly as a STUNner listener authenticates its
+	// own clients. Omit it for a server that takes no credentials.
+	Auth *AuthConfig `json:"auth,omitempty"`
+	// Insecure allows TLS certificate verification to be skipped for the TURN-TLS and
+	// TURN-DTLS transports.
+	Insecure bool `json:"insecure,omitempty"`
+}
+
+// HostPort returns the server's address in the "host:port" form the TURN client dials, bracketing
+// IPv6 hosts. Note that Address holds the bare host, so it is not interchangeable with this.
+func (s *TURNServer) HostPort() string {
+	return net.JoinHostPort(s.Address, strconv.Itoa(s.Port))
+}
+
+// Validate checks a TURN server configuration and injects defaults. Messages are phrased to compose
+// into the error of whatever config embeds the server.
+func (s *TURNServer) Validate() error {
+	if s.Address == "" {
+		return errors.New("missing TURN server address")
+	}
+	if s.Port < 1 || s.Port > 65535 {
+		return fmt.Errorf("invalid TURN server port %d", s.Port)
+	}
+
+	// no auth block means the server takes no credentials; a block that is present is
+	// validated like any other, defaults and all
+	if s.Auth != nil {
+		if err := s.Auth.Validate(); err != nil {
+			return fmt.Errorf("invalid TURN server auth: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Validate checks a configuration and injects defaults.
@@ -70,6 +123,26 @@ func (req *ClusterConfig) Validate() error {
 
 	sort.Strings(req.Endpoints)
 
+	// TURN-* protocol clusters require an upstream TURN server and take no endpoints (peer
+	// admission is the upstream server's job), direct clusters forbid the TURN server.
+	if p.IsTURN() {
+		if len(req.Endpoints) > 0 {
+			return fmt.Errorf("endpoints in %q protocol cluster configuration (peer "+
+				"admission is the upstream TURN server's job): %s",
+				req.Protocol, req.String())
+		}
+		if req.TURNServer == nil {
+			return fmt.Errorf("missing TURN server in %q protocol cluster configuration: %s",
+				req.Protocol, req.String())
+		}
+		if err := req.TURNServer.Validate(); err != nil {
+			return fmt.Errorf("%w in cluster configuration: %s", err, req.String())
+		}
+	} else if req.TURNServer != nil {
+		return fmt.Errorf("TURN server set in %q protocol cluster configuration: %s",
+			req.Protocol, req.String())
+	}
+
 	return nil
 }
 
@@ -89,6 +162,16 @@ func (req *ClusterConfig) DeepCopyInto(dst Config) {
 	*ret = *req
 	ret.Endpoints = make([]string, len(req.Endpoints))
 	copy(ret.Endpoints, req.Endpoints)
+	if req.TURNServer != nil {
+		s := *req.TURNServer
+		if req.TURNServer.Auth != nil {
+			// the auth config owns a map: copy it instead of aliasing it
+			a := AuthConfig{}
+			req.TURNServer.Auth.DeepCopyInto(&a)
+			s.Auth = &a
+		}
+		ret.TURNServer = &s
+	}
 }
 
 // String stringifies the configuration.
@@ -106,6 +189,14 @@ func (req *ClusterConfig) String() string {
 
 	if req.Protocol != "" {
 		status = append(status, fmt.Sprintf("protocol=%q", req.Protocol))
+	}
+
+	if req.TURNServer != nil {
+		status = append(status, fmt.Sprintf("turn-server=%q", req.TURNServer.HostPort()))
+		if req.TURNServer.Auth != nil {
+			// AuthConfig.String redacts the credentials for us
+			status = append(status, "turn-server-auth="+req.TURNServer.Auth.String())
+		}
 	}
 
 	status = append(status, fmt.Sprintf("endpoints=[%s]",

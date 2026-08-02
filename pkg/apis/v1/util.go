@@ -249,21 +249,38 @@ func (l ClusterType) String() string {
 type ClusterProtocol = Protocol
 
 const (
-	ClusterProtocolUDP     = ProtocolUDP
-	ClusterProtocolTCP     = ProtocolTCP
-	ClusterProtocolUnknown = ProtocolUnknown
+	ClusterProtocolUDP      = ProtocolUDP
+	ClusterProtocolTCP      = ProtocolTCP
+	ClusterProtocolTURNUDP  = ProtocolTURNUDP
+	ClusterProtocolTURNTCP  = ProtocolTURNTCP
+	ClusterProtocolTURNTLS  = ProtocolTURNTLS
+	ClusterProtocolTURNDTLS = ProtocolTURNDTLS
+	ClusterProtocolUnknown  = ProtocolUnknown
 )
 
 // NewClusterProtocol parses a protocol name and rejects any protocol that is not valid for a
-// cluster (backend).
+// cluster (backend). Direct clusters relay to the peers over plain UDP or TCP; TURN-* clusters
+// relay through an upstream TURN server reached over the transport encoded in the protocol.
 func NewClusterProtocol(raw string) (Protocol, error) {
 	if p, err := NewProtocol(raw); err == nil {
 		switch p {
-		case ProtocolUDP, ProtocolTCP:
+		case ProtocolUDP, ProtocolTCP,
+			ProtocolTURNUDP, ProtocolTURNTCP, ProtocolTURNTLS, ProtocolTURNDTLS:
 			return p, nil
 		}
 	}
 	return ProtocolUnknown, fmt.Errorf("unknown cluster protocol: \"%s\"", raw)
+}
+
+// IsTURN returns true if the protocol relays through an upstream TURN server (TURN-UDP, TURN-TCP,
+// TURN-TLS or TURN-DTLS).
+func (p Protocol) IsTURN() bool {
+	switch p {
+	case ProtocolTURNUDP, ProtocolTURNTCP, ProtocolTURNTLS, ProtocolTURNDTLS:
+		return true
+	default:
+		return false
+	}
 }
 
 // OffloadEngine specifies the type of TURN offload mode.
