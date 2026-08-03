@@ -10,10 +10,10 @@ import (
 
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/turnclient"
-	"github.com/l7mp/stunner/internal/util"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	a12n "github.com/l7mp/stunner/pkg/authentication"
+	"github.com/l7mp/stunner/v2/internal/turnclient"
+	"github.com/l7mp/stunner/v2/internal/util"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	a12n "github.com/l7mp/stunner/v2/pkg/authentication"
 )
 
 const UDP_PACKET_SIZE = 1500

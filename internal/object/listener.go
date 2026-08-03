@@ -13,10 +13,10 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/transport/v4"
 
-	"github.com/l7mp/stunner/internal/runtime"
-	"github.com/l7mp/stunner/internal/telemetry"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 // Listener implements a STUNner listener. The TURN server it drives lives in the listener's

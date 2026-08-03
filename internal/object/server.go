@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	objectturn "github.com/l7mp/stunner/internal/object/turn"
-	"github.com/l7mp/stunner/internal/runtime"
-	"github.com/l7mp/stunner/internal/util"
+	objectturn "github.com/l7mp/stunner/v2/internal/object/turn"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	"github.com/l7mp/stunner/v2/internal/util"
 )
 
 // ListenerServer is the lifecycle-only child node that owns the TURN server of a Listener.

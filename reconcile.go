@@ -3,9 +3,9 @@ package stunner
 import (
 	"errors"
 
-	"github.com/l7mp/stunner/internal/reconciler"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
+	"github.com/l7mp/stunner/v2/internal/reconciler"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 // Reconcile handles updates to the STUNner configuration. The actual walk is delegated to the

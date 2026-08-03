@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 func runAuth(_ *cobra.Command, args []string) error {

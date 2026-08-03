@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // CDSConfigFlags composes a set of flags for CDS server discovery.

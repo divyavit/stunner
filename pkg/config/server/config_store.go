@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Number if config updates that can be on-hold.

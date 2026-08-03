@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/logger"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 var turncatTestLoglevel string = "all:ERROR"

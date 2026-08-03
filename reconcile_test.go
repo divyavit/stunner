@@ -16,12 +16,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/l7mp/stunner/internal/object"
-	objectturn "github.com/l7mp/stunner/internal/object/turn"
-	"github.com/l7mp/stunner/internal/resolver"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	a12n "github.com/l7mp/stunner/pkg/authentication"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/object"
+	objectturn "github.com/l7mp/stunner/v2/internal/object/turn"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	a12n "github.com/l7mp/stunner/v2/pkg/authentication"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 var _ = fmt.Sprintf("%d", 1)

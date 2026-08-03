@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/l7mp/stunner/internal/telemetry"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
 	"github.com/pion/transport/v4"
 	"github.com/pion/transport/v4/stdnet"
 )

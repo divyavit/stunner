@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 func runLicense(_ *cobra.Command, args []string) error {

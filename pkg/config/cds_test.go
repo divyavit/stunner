@@ -12,10 +12,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/config/client"
-	"github.com/l7mp/stunner/pkg/config/server"
-	"github.com/l7mp/stunner/pkg/logger"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/config/client"
+	"github.com/l7mp/stunner/v2/pkg/config/server"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 // var testerLogLevel = zapcore.Level(-10)

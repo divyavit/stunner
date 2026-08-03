@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/l7mp/stunner/internal/icetester"
-	v1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/icetester"
+	v1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 const DefaultTestNamespace = "icetest"

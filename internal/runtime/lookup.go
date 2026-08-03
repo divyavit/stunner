@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	licensecfg "github.com/l7mp/stunner/pkg/config/license"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	licensecfg "github.com/l7mp/stunner/v2/pkg/config/license"
 )
 
 var defaultSingletonNames = map[ObjectType]string{

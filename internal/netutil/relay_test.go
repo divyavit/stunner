@@ -9,8 +9,8 @@ import (
 	"github.com/pion/transport/v4/vnet"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/l7mp/stunner/internal/telemetry"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 var connTestLoglevel string = "all:ERROR"

@@ -3,8 +3,8 @@ package object
 import (
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Stunner is the root Object of the dataplane tree. It holds no own runtime state; its job is

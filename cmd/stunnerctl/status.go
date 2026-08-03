@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	v1 "github.com/l7mp/stunner/pkg/apis/v1"
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
+	v1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 func runStatus(_ *cobra.Command, args []string) error {

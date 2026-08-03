@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 func TestNewConfig(t *testing.T) {

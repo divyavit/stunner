@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/config/server/api"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/config/server/api"
 )
 
 func (s *Server) WSUpgradeMiddleware(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {

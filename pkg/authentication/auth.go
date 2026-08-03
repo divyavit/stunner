@@ -12,7 +12,7 @@ import (
 
 	"github.com/pion/turn/v5"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // UsernameSeparator is the separator character used in time-windowed TURN authentication as

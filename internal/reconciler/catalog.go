@@ -1,8 +1,8 @@
 package reconciler
 
 import (
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // KindSpec is the complete declarative description of one object kind: its constructor, its

@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	v1 "github.com/l7mp/stunner/pkg/apis/v1"
+	v1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 const (

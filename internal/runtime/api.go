@@ -3,7 +3,7 @@ package runtime
 import (
 	"net"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // This file declares the interfaces of the runtime services that the Runtime stores and hands

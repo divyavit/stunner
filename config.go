@@ -8,10 +8,10 @@ import (
 
 	"github.com/pion/transport/v4"
 
-	"github.com/l7mp/stunner/internal/resolver"
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/config/client"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 // Options defines various options for the STUNner server.

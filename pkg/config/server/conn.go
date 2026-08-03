@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/l7mp/stunner/pkg/config/util"
+	"github.com/l7mp/stunner/v2/pkg/config/util"
 )
 
 // Conn represents a client WebSocket connection.

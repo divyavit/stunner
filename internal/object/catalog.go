@@ -5,9 +5,9 @@ package object
 import (
 	"fmt"
 
-	"github.com/l7mp/stunner/internal/reconciler"
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/reconciler"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 type KindSpec = reconciler.KindSpec

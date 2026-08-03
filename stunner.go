@@ -11,17 +11,17 @@ import (
 	"github.com/pion/transport/v4/stdnet"
 	"golang.org/x/time/rate"
 
-	"github.com/l7mp/stunner/internal/object"
-	"github.com/l7mp/stunner/internal/offload"
-	"github.com/l7mp/stunner/internal/quota"
-	"github.com/l7mp/stunner/internal/reconciler"
-	"github.com/l7mp/stunner/internal/resolver"
-	"github.com/l7mp/stunner/internal/router"
-	"github.com/l7mp/stunner/internal/runtime"
-	"github.com/l7mp/stunner/internal/telemetry"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	licensecfg "github.com/l7mp/stunner/pkg/config/license"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/object"
+	"github.com/l7mp/stunner/v2/internal/offload"
+	"github.com/l7mp/stunner/v2/internal/quota"
+	"github.com/l7mp/stunner/v2/internal/reconciler"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	"github.com/l7mp/stunner/v2/internal/router"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	licensecfg "github.com/l7mp/stunner/v2/pkg/config/license"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 // DefaultLogLevel indicates the default log level.

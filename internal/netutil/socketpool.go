@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/l7mp/stunner/internal/telemetry"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
 	"github.com/pion/transport/v4"
 )
 

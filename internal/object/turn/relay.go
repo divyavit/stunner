@@ -11,11 +11,11 @@ import (
 	"github.com/pion/transport/v4/stdnet"
 	"github.com/pion/turn/v5"
 
-	"github.com/l7mp/stunner/internal/netutil"
-	objruntime "github.com/l7mp/stunner/internal/runtime"
-	"github.com/l7mp/stunner/internal/telemetry"
-	"github.com/l7mp/stunner/internal/turnclient"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/netutil"
+	objruntime "github.com/l7mp/stunner/v2/internal/runtime"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	"github.com/l7mp/stunner/v2/internal/turnclient"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 var errNilConn = errors.New("cannot allocate relay connection")

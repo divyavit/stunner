@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/l7mp/stunner/internal/netutil"
-	iTelemetry "github.com/l7mp/stunner/internal/telemetry"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/netutil"
+	iTelemetry "github.com/l7mp/stunner/v2/internal/telemetry"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 const testConnLogLevel = "all:ERROR"

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 func decodeConfig(r []byte) ([]*stnrv1.StunnerConfig, error) {

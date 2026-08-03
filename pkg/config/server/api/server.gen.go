@@ -18,7 +18,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
-	stunnerv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stunnerv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 	"github.com/oapi-codegen/runtime"
 )
 
@@ -720,25 +720,25 @@ func (sh *strictHandler) GetV1LicenseStatus(w http.ResponseWriter, r *http.Reque
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

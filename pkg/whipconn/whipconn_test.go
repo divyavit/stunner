@@ -15,7 +15,7 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
 
-	slogger "github.com/l7mp/stunner/pkg/logger"
+	slogger "github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 var (

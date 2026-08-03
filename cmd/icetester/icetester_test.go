@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/l7mp/stunner/pkg/logger"
-	"github.com/l7mp/stunner/pkg/whipconn"
+	"github.com/l7mp/stunner/v2/pkg/logger"
+	"github.com/l7mp/stunner/v2/pkg/whipconn"
 )
 
 var (

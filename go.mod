@@ -1,4 +1,4 @@
-module github.com/l7mp/stunner
+module github.com/l7mp/stunner/v2
 
 go 1.26.0
 

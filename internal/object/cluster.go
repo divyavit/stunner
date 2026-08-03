@@ -10,10 +10,10 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/transport/v4"
 
-	"github.com/l7mp/stunner/internal/resolver"
-	"github.com/l7mp/stunner/internal/runtime"
-	"github.com/l7mp/stunner/internal/util"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	"github.com/l7mp/stunner/v2/internal/util"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Cluster represents a set of upstream peers to which STUNner can relay traffic. Static clusters

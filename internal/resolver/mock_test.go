@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 // var resolverTestLoglevel string = "all:TRACE"

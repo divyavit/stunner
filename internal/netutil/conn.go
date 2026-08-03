@@ -13,7 +13,7 @@ import (
 
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/telemetry"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
 )
 
 // ErrPortProhibited is returned when a peer endpoint is not admitted by any routed cluster.

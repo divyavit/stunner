@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/l7mp/stunner/pkg/config/server/api"
+	"github.com/l7mp/stunner/v2/pkg/config/server/api"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 type ConfigList = api.V1ConfigList

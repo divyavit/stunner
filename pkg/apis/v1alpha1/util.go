@@ -3,7 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // AuthType species the type of the STUN/TURN authentication mechanism used by STUNner

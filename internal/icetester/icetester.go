@@ -21,10 +21,10 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 
-	v1 "github.com/l7mp/stunner/pkg/apis/v1"
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
-	"github.com/l7mp/stunner/pkg/logger"
-	"github.com/l7mp/stunner/pkg/whipconn"
+	v1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
+	"github.com/l7mp/stunner/v2/pkg/logger"
+	"github.com/l7mp/stunner/v2/pkg/whipconn"
 )
 
 const (

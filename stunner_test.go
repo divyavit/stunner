@@ -24,13 +24,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
-	"github.com/l7mp/stunner/internal/resolver"
-	telemetrytester "github.com/l7mp/stunner/internal/telemetry/tester"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	telemetrytester "github.com/l7mp/stunner/v2/internal/telemetry/tester"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	stnrv1a1 "github.com/l7mp/stunner/pkg/apis/v1alpha1"
-	cfgclient "github.com/l7mp/stunner/pkg/config/client"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	stnrv1a1 "github.com/l7mp/stunner/v2/pkg/apis/v1alpha1"
+	cfgclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 const (

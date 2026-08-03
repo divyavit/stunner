@@ -13,11 +13,11 @@ import (
 
 	cliopt "k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/l7mp/stunner"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/buildinfo"
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/buildinfo"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 const usage = `turncat [options] <client-addr> <turn-server-addr> <peer-addr>

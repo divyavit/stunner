@@ -10,11 +10,11 @@ import (
 
 	"github.com/pion/transport/v4"
 
-	"github.com/l7mp/stunner/internal/offload"
-	"github.com/l7mp/stunner/internal/resolver"
-	"github.com/l7mp/stunner/internal/telemetry"
-	licensecfg "github.com/l7mp/stunner/pkg/config/license"
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/internal/offload"
+	"github.com/l7mp/stunner/v2/internal/resolver"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	licensecfg "github.com/l7mp/stunner/v2/pkg/config/license"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 // Config carries the process-wide dependencies shared by all objects. Set once at startup. The

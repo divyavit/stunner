@@ -1,5 +1,5 @@
 # Build variables
-PACKAGE = github.com/l7mp/stunner
+PACKAGE = github.com/l7mp/stunner/v2
 BUILD_DIR ?= bin/
 VERSION ?= $(shell (git describe --tags --abbrev=8 --always --long) | tr "/" "-")
 COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null)

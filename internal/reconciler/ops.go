@@ -1,8 +1,8 @@
 package reconciler
 
 import (
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // createPlan is a deferred construction: the plan walk records what to build (kind, config, and

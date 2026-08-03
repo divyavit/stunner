@@ -17,10 +17,10 @@ import (
 	// takes precedence.
 	_ "golang.org/x/crypto/x509roots/fallback"
 
-	"github.com/l7mp/stunner"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/buildinfo"
-	cdsclient "github.com/l7mp/stunner/pkg/config/client"
+	"github.com/l7mp/stunner/v2"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/buildinfo"
+	cdsclient "github.com/l7mp/stunner/v2/pkg/config/client"
 )
 
 var (

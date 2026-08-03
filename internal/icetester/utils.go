@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 
-	v1 "github.com/l7mp/stunner/pkg/apis/v1"
+	v1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 var turnURIAddrRegexp = regexp.MustCompile(`:(\d+.\d+.\d+.\d+):`)

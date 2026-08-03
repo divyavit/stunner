@@ -9,8 +9,8 @@ import (
 
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/telemetry"
-	licensecfg "github.com/l7mp/stunner/pkg/config/license"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
+	licensecfg "github.com/l7mp/stunner/v2/pkg/config/license"
 )
 
 // Deps are the process-wide dependencies of the offload engine, set once at construction.

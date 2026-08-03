@@ -11,8 +11,8 @@ import (
 	"github.com/pion/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Metrics is the Object that owns the Prometheus metrics HTTP server. Carving it out of Admin

@@ -7,10 +7,10 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/turn/v5"
 
-	"github.com/l7mp/stunner/internal/offload"
-	objruntime "github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	a12n "github.com/l7mp/stunner/pkg/authentication"
+	"github.com/l7mp/stunner/v2/internal/offload"
+	objruntime "github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	a12n "github.com/l7mp/stunner/v2/pkg/authentication"
 )
 
 // NewAuthHandler returns an authentication handler callback for a TURN server.

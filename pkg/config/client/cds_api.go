@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/config/client/api"
-	"github.com/l7mp/stunner/pkg/config/util"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/config/client/api"
+	"github.com/l7mp/stunner/v2/pkg/config/util"
 	"github.com/pion/logging"
 )
 

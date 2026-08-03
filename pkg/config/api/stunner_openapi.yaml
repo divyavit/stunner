@@ -167,13 +167,13 @@ components:
       x-go-type: "stunnerv1.LicenseStatus"
       x-go-type-import:
         name: stunnerv1
-        path: "github.com/l7mp/stunner/pkg/apis/v1"
+        path: "github.com/l7mp/stunner/v2/pkg/apis/v1"
     v1.Config:
       description: 'Config provides a STUNner config. Schema is defined in https://github.com/l7mp/stunner/tree/main/pkg/apis/v1'
       x-go-type: "stunnerv1.StunnerConfig"
       x-go-type-import:
         name: stunnerv1
-        path: "github.com/l7mp/stunner/pkg/apis/v1"
+        path: "github.com/l7mp/stunner/v2/pkg/apis/v1"
     v1.Error:
       description: API error.
       type: object

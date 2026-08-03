@@ -5,8 +5,8 @@ import (
 
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/runtime"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/runtime"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Auth is the STUNner authenticator. TURN handlers read the live auth config per request via

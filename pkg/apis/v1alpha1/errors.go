@@ -1,6 +1,6 @@
 package v1alpha1
 
-import stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+import stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 
 var (
 	ErrInvalidConf    = stnrv1.ErrInvalidConf

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/l7mp/stunner/internal/util"
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/internal/util"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // URI is the specification of a STUNner listener URI

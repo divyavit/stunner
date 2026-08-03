@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
-	"github.com/l7mp/stunner/pkg/config/client/api"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
+	"github.com/l7mp/stunner/v2/pkg/config/client/api"
 	"github.com/pion/logging"
 )
 

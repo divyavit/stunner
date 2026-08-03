@@ -5,7 +5,7 @@ import (
 	"maps"
 	"strings"
 
-	stnrv1 "github.com/l7mp/stunner/pkg/apis/v1"
+	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
 // Config is the main interface for STUNner configuration objects

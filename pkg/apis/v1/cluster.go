@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/l7mp/stunner/internal/util"
+	"github.com/l7mp/stunner/v2/internal/util"
 )
 
 // ClusterConfig specifies a set of upstream peers to which STUNner can open transport relay

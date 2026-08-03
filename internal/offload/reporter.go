@@ -7,7 +7,7 @@ import (
 
 	"github.com/pion/logging"
 
-	"github.com/l7mp/stunner/internal/telemetry"
+	"github.com/l7mp/stunner/v2/internal/telemetry"
 )
 
 // OffloadStatsUpdateInterval is how often the reporter samples the engine and updates telemetry.

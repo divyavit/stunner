@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/l7mp/stunner/pkg/logger"
+	"github.com/l7mp/stunner/v2/pkg/logger"
 )
 
 func TestTelemetryNewDryRunResource(t *testing.T) {
