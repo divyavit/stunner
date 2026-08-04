@@ -1,6 +1,10 @@
 // Package l4 implements the flow engine of the plain (non-TURN) listeners. A plain listener
 // relays every client flow verbatim to the single static peer configured on the listener: raw
 // flows carry no in-band peer address, so the peer is pinned in the listener config.
+//
+// Flows are strictly client-initiated: peer traffic is delivered only into existing flows, the
+// L4 analog of TURN's allocation-scoped peer traffic. Relaying is outbound-only for now; a
+// peer-initiated (reverse tunnel) mode is future work.
 package l4
 
 import (
@@ -29,15 +33,13 @@ var FlowTimeout = 10 * time.Minute
 
 // Server drives the plain-listener flow engine for one listener context.
 type Server struct {
-	listener  string
-	proto     stnrv1.ListenerProtocol
-	peerProto stnrv1.Protocol
-	peerAddr  string
-	idle      time.Duration
-	runtime   *objruntime.Runtime
-	relay     *objectturn.Relay
-	ln        net.Listener
-	log       logging.LeveledLogger
+	listener string
+	proto    stnrv1.ListenerProtocol
+	idle     time.Duration
+	runtime  *objruntime.Runtime
+	relay    *objectturn.Relay
+	ln       net.Listener
+	log      logging.LeveledLogger
 
 	mu     sync.Mutex
 	flows  map[*flow]struct{}
@@ -53,17 +55,14 @@ func NewServer(listener string, rt *objruntime.Runtime) (*Server, error) {
 	}
 	log := rt.Logger.NewLogger(fmt.Sprintf("listener-%s", listener))
 
-	peerProto, peerAddr := conf.PeerEndpoint()
 	s := &Server{
-		listener:  listener,
-		proto:     proto,
-		peerProto: peerProto,
-		peerAddr:  peerAddr,
-		idle:      FlowTimeout,
-		runtime:   rt,
-		relay:     objectturn.NewRelay(listener, rt),
-		log:       log,
-		flows:     make(map[*flow]struct{}),
+		listener: listener,
+		proto:    proto,
+		idle:     FlowTimeout,
+		runtime:  rt,
+		relay:    objectturn.NewRelay(listener, rt),
+		log:      log,
+		flows:    make(map[*flow]struct{}),
 	}
 	log.Debugf("flow engine %s (re)starting", listener)
 
@@ -114,8 +113,8 @@ func (s *Server) acceptLoop() {
 func (s *Server) serve(client net.Conn) {
 	f, err := s.newFlow(client)
 	if err != nil {
-		s.log.Infof("rejecting flow from client %s to peer %s: %s",
-			client.RemoteAddr().String(), s.peerAddr, err.Error())
+		s.log.Infof("rejecting flow from client %s: %s",
+			client.RemoteAddr().String(), err.Error())
 		_ = client.Close()
 		return
 	}
@@ -126,15 +125,22 @@ func (s *Server) serve(client net.Conn) {
 
 // newFlow admits and wires a client flow: it resolves the configured peer, routes it through
 // the listener's clusters (failing early when nothing admits it), creates the relay leg, and
-// registers the flow.
+// registers the flow. The peer is read from the live config, so a reconciled peer address
+// applies to new flows while existing flows stay pinned to the peer they were created with.
 func (s *Server) newFlow(client net.Conn) (*flow, error) {
-	host, portStr, err := net.SplitHostPort(s.peerAddr)
+	conf, ok := s.runtime.GetConfig(objruntime.TypeListener, s.listener).(*stnrv1.ListenerConfig)
+	if !ok || conf == nil {
+		return nil, net.ErrClosed
+	}
+	peerProto, peerAddr := conf.PeerEndpoint()
+
+	host, portStr, err := net.SplitHostPort(peerAddr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid peer address %q: %w", s.peerAddr, err)
+		return nil, fmt.Errorf("invalid peer address %q: %w", peerAddr, err)
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid port in peer address %q: %w", s.peerAddr, err)
+		return nil, fmt.Errorf("invalid port in peer address %q: %w", peerAddr, err)
 	}
 	ipAddr, err := net.ResolveIPAddr("ip", host)
 	if err != nil {
@@ -156,7 +162,7 @@ func (s *Server) newFlow(client net.Conn) (*flow, error) {
 	// The peer's own transport picks the relay leg; whether the leg relays directly or
 	// through an upstream TURN server is the allocators' internal business.
 	f := &flow{s: s, client: client}
-	switch s.peerProto {
+	switch peerProto {
 	case stnrv1.ProtocolTCP:
 		peer := &net.TCPAddr{IP: ip, Port: port}
 		f.peer = peer
@@ -207,8 +213,9 @@ func (s *Server) removeFlow(f *flow) {
 	delete(s.flows, f)
 }
 
-// FlowCount returns the number of live flows; flows count as allocations for draining.
-func (s *Server) FlowCount() int {
+// AllocationCount returns the number of live flows: flows are the L4 analog of TURN
+// allocations and count as such for draining, telemetry, and status.
+func (s *Server) AllocationCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.flows)

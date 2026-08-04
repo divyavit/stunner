@@ -119,10 +119,10 @@ func TestFlowUDPRelay(t *testing.T) {
 	n, err := client.Read(buf)
 	require.NoError(t, err, "echo")
 	assert.Equal(t, "hello", string(buf[:n]), "echo payload")
-	assert.Equal(t, 1, s.FlowCount(), "flow count")
+	assert.Equal(t, 1, s.AllocationCount(), "flow count")
 
 	require.NoError(t, s.Close())
-	assert.Eventually(t, func() bool { return s.FlowCount() == 0 }, time.Second,
+	assert.Eventually(t, func() bool { return s.AllocationCount() == 0 }, time.Second,
 		10*time.Millisecond, "flows torn down on close")
 }
 
@@ -146,11 +146,11 @@ func TestFlowTCPClientRelay(t *testing.T) {
 	n, err := client.Read(buf)
 	require.NoError(t, err, "echo")
 	assert.Equal(t, "hello", string(buf[:n]), "echo payload")
-	assert.Equal(t, 1, s.FlowCount(), "flow count")
+	assert.Equal(t, 1, s.AllocationCount(), "flow count")
 
 	// a client FIN tears the flow down
 	require.NoError(t, client.Close())
-	assert.Eventually(t, func() bool { return s.FlowCount() == 0 }, time.Second,
+	assert.Eventually(t, func() bool { return s.AllocationCount() == 0 }, time.Second,
 		10*time.Millisecond, "flow torn down on client close")
 }
 
@@ -197,7 +197,7 @@ func TestFlowTCPPeerRelay(t *testing.T) {
 	n, err := client.Read(buf)
 	require.NoError(t, err, "echo")
 	assert.Equal(t, "hello", string(buf[:n]), "echo payload")
-	assert.Equal(t, 1, s.FlowCount(), "flow count")
+	assert.Equal(t, 1, s.AllocationCount(), "flow count")
 }
 
 // TestFlowAdmission verifies that a peer no routed cluster admits fails the flow early:
@@ -219,7 +219,7 @@ func TestFlowAdmission(t *testing.T) {
 	buf := make([]byte, 2048)
 	_, err = client.Read(buf)
 	assert.Error(t, err, "no echo from an unadmitted peer")
-	assert.Equal(t, 0, s.FlowCount(), "no flow registered")
+	assert.Equal(t, 0, s.AllocationCount(), "no flow registered")
 }
 
 // TestFlowPreflightProtocolAgnostic pins the admission pre-flight semantics: it follows the
@@ -246,7 +246,7 @@ func TestFlowPreflightProtocolAgnostic(t *testing.T) {
 	buf := make([]byte, 2048)
 	_, err = client.Read(buf)
 	assert.Error(t, err, "no echo: the leg refuses the unadmitted transport")
-	assert.Eventually(t, func() bool { return s.FlowCount() == 0 }, time.Second,
+	assert.Eventually(t, func() bool { return s.AllocationCount() == 0 }, time.Second,
 		10*time.Millisecond, "flow torn down on the refused write")
 }
 
@@ -276,22 +276,22 @@ func TestFlowIdleExpiry(t *testing.T) {
 	}
 
 	echo()
-	assert.Equal(t, 1, s.FlowCount(), "flow created")
+	assert.Equal(t, 1, s.AllocationCount(), "flow created")
 
 	// keep the flow busy over several timer periods: activity re-arms the idle timer
 	for i := 0; i < 5; i++ {
 		time.Sleep(50 * time.Millisecond)
 		echo()
 	}
-	assert.Equal(t, 1, s.FlowCount(), "active flow survives the idle timer")
+	assert.Equal(t, 1, s.AllocationCount(), "active flow survives the idle timer")
 
 	// quiet flow expires
-	assert.Eventually(t, func() bool { return s.FlowCount() == 0 }, time.Second,
+	assert.Eventually(t, func() bool { return s.AllocationCount() == 0 }, time.Second,
 		10*time.Millisecond, "idle flow torn down")
 
 	// fresh traffic re-creates the flow
 	echo()
-	assert.Equal(t, 1, s.FlowCount(), "flow re-created on traffic")
+	assert.Equal(t, 1, s.AllocationCount(), "flow re-created on traffic")
 }
 
 // TestFlowGoroutineLeak verifies that flow and engine teardown release the pump goroutines.

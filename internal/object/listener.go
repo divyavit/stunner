@@ -101,7 +101,9 @@ func (l *Listener) Inspect(old, new stnrv1.Config, full *stnrv1.StunnerConfig) (
 		return runtime.ActionNone, fmt.Errorf("invalid TLS key: base64-decode error: %w", err)
 	}
 
-	// A restart is only avoidable when Routes and/or PublicIP/PublicPort are the only changes.
+	// A restart is only avoidable when Routes, PublicIP/PublicPort and/or PeerAddr are the
+	// only changes. A peer address change reconciles in place: existing flows stay pinned to
+	// the peer they were created with, new flows go to the new peer.
 	restart := !(l.name == req.Name && //nolint:staticcheck
 		l.proto == proto &&
 		l.rawAddr == req.Addr &&
@@ -142,12 +144,16 @@ func (l *Listener) Reconcile(conf stnrv1.Config) error {
 	}
 
 	proto, _ := stnrv1.NewListenerProtocol(req.Protocol)
-	ipAddr := net.ParseIP(req.Addr)
-	if ipAddr == nil && req.Addr == "localhost" {
-		ipAddr = net.ParseIP("127.0.0.1")
-	}
-	if ipAddr == nil {
-		return fmt.Errorf("invalid listener address: %s", req.Addr)
+	var ipAddr net.IP
+	if proto != stnrv1.ProtocolSTDIN {
+		// STDIN listeners have no listener socket and carry no address
+		ipAddr = net.ParseIP(req.Addr)
+		if ipAddr == nil && req.Addr == "localhost" {
+			ipAddr = net.ParseIP("127.0.0.1")
+		}
+		if ipAddr == nil {
+			return fmt.Errorf("invalid listener address: %s", req.Addr)
+		}
 	}
 
 	l.proto = proto
