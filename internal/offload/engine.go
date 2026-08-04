@@ -43,7 +43,8 @@ type Engine interface {
 	Close() error
 	// Upsert establishes a new offloaded connection on the engine or modifies an existing one.
 	Upsert(client, peer Connection, listenerName, clusterName string) error
-	// Remove removes an offloaded connection.
+	// Remove removes an offloaded connection. Removing a connection that is not offloaded
+	// is not an error.
 	Remove(client, peer Connection) error
 	// Stats returns the last cached offload statistics, keyed by object name-hash and direction.
 	Stats() (StatMap, error)

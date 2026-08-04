@@ -119,32 +119,40 @@ const (
 	AllocationDeleted
 )
 
-type quotaHandler struct {
+// Quota is the per-user session quota machinery shared by the packet engines: QuotaHandler
+// gates new sessions (TURN allocations, L4 flows) and AllocationHandler administers the
+// counters from the lifecycle events.
+type Quota struct {
 	runtime *objruntime.Runtime
 }
 
 // NewQuotaHandler creates a quota handler for a listener context.
-func NewQuotaHandler(rt *objruntime.Runtime) *quotaHandler {
-	return &quotaHandler{runtime: rt}
+func NewQuotaHandler(rt *objruntime.Runtime) *Quota {
+	return &Quota{runtime: rt}
 }
 
-// QuotaHandler returns a callback that enforces per-user allocation quotas.
-func (q *quotaHandler) QuotaHandler() turn.QuotaHandler {
+// QuotaHandler returns a callback that enforces per-user session quotas. The check and the
+// quota reservation are one atomic step (CheckAndIncrement), so concurrent sessions cannot
+// race past the cap; AllocationHandler releases the reservation on session teardown.
+func (q *Quota) QuotaHandler() turn.QuotaHandler {
 	return func(username, realm string, _ net.Addr) bool {
-		admin := q.runtime.GetConfig(objruntime.TypeAdmin, "").(*stnrv1.AdminConfig)
-		return q.runtime.QuotaHandler.CheckAndIncrement(username, realm, admin.UserQuota)
+		quota := 0
+		if admin, ok := q.runtime.GetConfig(objruntime.TypeAdmin, "").(*stnrv1.AdminConfig); ok && admin != nil {
+			quota = admin.UserQuota
+		}
+		return q.runtime.QuotaHandler.CheckAndIncrement(username, realm, quota)
 	}
 }
 
-// AllocationHandler updates quota accounting on allocation lifecycle events.
-func (q *quotaHandler) AllocationHandler(_ net.Addr, _ net.Addr, _ string, username, realm string, event AllocationEventType) {
+// AllocationHandler updates quota accounting on session lifecycle events.
+func (q *Quota) AllocationHandler(_ net.Addr, _ net.Addr, _ string, username, realm string, event AllocationEventType) {
 	if event == AllocationDeleted {
 		q.runtime.QuotaHandler.Decrement(username, realm)
 	}
 }
 
 // NewEventHandler creates a set of callbacks for tracking the lifecycle of TURN allocations.
-func NewEventHandler(name string, rt *objruntime.Runtime, log logging.LeveledLogger, q *quotaHandler) turn.EventHandler {
+func NewEventHandler(name string, rt *objruntime.Runtime, log logging.LeveledLogger, q *Quota) turn.EventHandler {
 	return turn.EventHandler{
 		OnAuth: func(src, dst net.Addr, proto, username, realm string, method string, verdict bool) {
 			status := "REJECTED"

@@ -101,7 +101,17 @@ func (d Dialer) ListenPacket(ctx context.Context, _, _ string) (net.PacketConn, 
 		return nil, fmt.Errorf("upstream allocation failed: %w", err)
 	}
 
-	return &packetConn{PacketConn: relay, client: client, transport: transport}, nil
+	// the wire runs over UDP for the turn-udp/turn-dtls transports and over TCP otherwise;
+	// resolution succeeded inside dial, so it cannot fail here
+	var server net.Addr
+	switch d.Protocol {
+	case stnrv1.ProtocolTURNUDP, stnrv1.ProtocolTURNDTLS:
+		server, _ = net.ResolveUDPAddr("udp", d.ServerAddr)
+	default:
+		server, _ = net.ResolveTCPAddr("tcp", d.ServerAddr)
+	}
+
+	return &packetConn{PacketConn: relay, client: client, transport: transport, server: server}, nil
 }
 
 // DialContext makes a TCP (RFC 6062) allocation on the TURN server and opens a relayed connection
@@ -251,6 +261,7 @@ type packetConn struct {
 	net.PacketConn // the upstream allocation
 	client         *turn.Client
 	transport      net.PacketConn
+	server         net.Addr
 	once           sync.Once
 }
 
@@ -261,6 +272,33 @@ func (c *packetConn) Close() error {
 		c.transport.Close() //nolint:errcheck
 	})
 	return err
+}
+
+// TransportAddrs returns the wire addresses of the TURN session: the transport socket's local
+// address and the server's address. This is the 5-tuple a kernel offload must match on; the
+// allocation's own LocalAddr is the server-side relayed address, useless for local offload.
+func (c *packetConn) TransportAddrs() (local, remote net.Addr) {
+	return c.transport.LocalAddr(), c.server
+}
+
+// channelFinder is the reverse channel mapper of the pion client relay conn (the merged
+// upstream accessor). The forward (addr to channel) accessor is not public upstream yet, so
+// callers probe channel numbers through this.
+type channelFinder interface {
+	FindAddrByChannelNumber(chNum uint16) (net.Addr, bool)
+}
+
+// FindAddrByChannelNumber exposes the pion relay conn's reverse channel mapper: the peer
+// address the TURN client assigned the channel number for on this session. Note that
+// assignment happens at the first write towards the peer while the ChannelBind transaction
+// completes asynchronously, so a freshly reported channel may still be one round-trip away
+// from being accepted by the server.
+func (c *packetConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
+	f, ok := c.PacketConn.(channelFinder)
+	if !ok {
+		return nil, false
+	}
+	return f.FindAddrByChannelNumber(chNum)
 }
 
 // conn is an RFC 6062 relayed TCP connection that owns its TURN session: Close closes the data

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,10 @@ type Server struct {
 	idle     time.Duration
 	runtime  *objruntime.Runtime
 	relay    *objectturn.Relay
+	quota    *objectturn.Quota
+	gate     turn.QuotaHandler
+	events   EventHandler
+	offload  *offloadHandler
 	ln       net.Listener
 	log      logging.LeveledLogger
 
@@ -55,12 +60,19 @@ func NewServer(listener string, rt *objruntime.Runtime) (*Server, error) {
 	}
 	log := rt.Logger.NewLogger(fmt.Sprintf("listener-%s", listener))
 
+	// The quota machinery is shared with the TURN engine: the same gate admits sessions
+	// and the same allocation handler administers the counters from the lifecycle events.
+	q := objectturn.NewQuotaHandler(rt)
 	s := &Server{
 		listener: listener,
 		proto:    proto,
 		idle:     FlowTimeout,
 		runtime:  rt,
 		relay:    objectturn.NewRelay(listener, rt),
+		quota:    q,
+		gate:     q.QuotaHandler(),
+		events:   NewEventHandler(listener, rt, log, q),
+		offload:  newOffloadHandler(listener, rt, log),
 		log:      log,
 		flows:    make(map[*flow]struct{}),
 	}
@@ -118,8 +130,6 @@ func (s *Server) serve(client net.Conn) {
 		_ = client.Close()
 		return
 	}
-	s.log.Debugf("flow created: client=%s, peer=%s", client.RemoteAddr().String(),
-		f.peer.String())
 	f.run()
 }
 
@@ -150,18 +160,39 @@ func (s *Server) newFlow(client net.Conn) (*flow, error) {
 
 	// Admission pre-flight, with exactly the TURN permission-handler rule: grant when any
 	// routed cluster admits the peer (a TURN-* cluster admits every peer, admission is then
-	// the upstream server's job). Protocol-aware enforcement stays where it always was: the
-	// per-datagram admission wrapper on direct legs and the upstream server on TURN legs.
+	// the upstream server's job).
 	rt := s.runtime
-	if _, ok := rt.Router.Route(s.listener, func(c objruntime.Cluster) bool {
+	admitting, ok := rt.Router.Route(s.listener, func(c objruntime.Cluster) bool {
 		return c.Admits(ip, port)
-	}); !ok {
+	})
+	if !ok {
 		return nil, netutil.ErrPortProhibited
+	}
+
+	// Quota gate: mint the flow's quota identity and fail before anything is dialed. The
+	// gate reserves the quota atomically, so every later failure path must release the
+	// reservation (success releases through the flow-deleted event).
+	user, realm := flowIdentity(rt, client.RemoteAddr())
+	if !s.gate(user, realm, client.RemoteAddr()) {
+		return nil, errQuotaExceeded
+	}
+	quotaRelease := func() {
+		s.quota.AllocationHandler(client.RemoteAddr(), client.LocalAddr(),
+			strings.ToLower(s.proto.String()), user, realm, objectturn.AllocationDeleted)
 	}
 
 	// The peer's own transport picks the relay leg; whether the leg relays directly or
 	// through an upstream TURN server is the allocators' internal business.
 	f := &flow{s: s, client: client}
+	f.ev = FlowEvent{
+		SrcAddr:      client.RemoteAddr(),
+		DstAddr:      client.LocalAddr(),
+		Protocol:     strings.ToLower(s.proto.String()),
+		PeerProtocol: strings.ToLower(peerProto.String()),
+		Cluster:      admitting.Name(),
+		Username:     user,
+		Realm:        realm,
+	}
 	switch peerProto {
 	case stnrv1.ProtocolTCP:
 		peer := &net.TCPAddr{IP: ip, Port: port}
@@ -172,6 +203,7 @@ func (s *Server) newFlow(client net.Conn) (*flow, error) {
 		}
 		conn, err := s.relay.AllocateConn(turn.AllocateConnConfig{Network: network, RemoteAddr: peer})
 		if err != nil {
+			quotaRelease()
 			return nil, err
 		}
 		f.relayStream = conn
@@ -183,17 +215,43 @@ func (s *Server) newFlow(client net.Conn) (*flow, error) {
 		}
 		pc, _, err := s.relay.AllocatePacketConn(turn.AllocateListenerConfig{Network: network})
 		if err != nil {
+			quotaRelease()
 			return nil, err
 		}
 		f.relayPacket = pc
 	}
+	f.ev.Peer = f.peer
+
+	// A direct leg leaves from its relay socket; an upstream TURN leg leaves from the
+	// session's transport socket towards the server, and the offload housekeeping learns
+	// its channel through the leg's channel finder.
+	switch {
+	case f.relayPacket != nil:
+		inner := net.PacketConn(f.relayPacket)
+		if u, ok := inner.(unwrapper); ok {
+			inner = u.Unwrap()
+		}
+		if leg, ok := inner.(upstreamLeg); ok {
+			f.finder = leg
+			local, remote := leg.TransportAddrs()
+			f.ev.RelayAddr = local
+			f.ev.ServerAddr = remote
+		} else {
+			f.ev.RelayAddr = f.relayPacket.LocalAddr()
+		}
+	case f.relayStream != nil:
+		f.ev.RelayAddr = f.relayStream.LocalAddr()
+	}
 
 	if !s.addFlow(f) {
+		quotaRelease()
 		f.closeLeg()
 		return nil, net.ErrClosed
 	}
 	f.touch()
 	f.timer = time.AfterFunc(s.idle, f.checkIdle)
+	s.events.OnFlowCreated(f.ev)
+	s.offload.upsert(f)
 	return f, nil
 }
 

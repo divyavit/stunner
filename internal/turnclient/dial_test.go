@@ -1,9 +1,13 @@
 package turnclient
 
 import (
+	"context"
+	"net"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/pion/turn/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -64,4 +68,51 @@ func TestNewConfig(t *testing.T) {
 		_, err := NewConfig(s, stnrv1.ProtocolTURNUDP)
 		assert.Error(t, err)
 	})
+}
+
+// TestUpstreamSessionChannel drives a real TURN session against a local pion server: the
+// client assigns a channel for the peer at the first write, the probe finds it at the channel
+// floor, and TransportAddrs reports the wire 5-tuple.
+func TestUpstreamSessionChannel(t *testing.T) {
+	serverConn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	require.NoError(t, err, "server socket")
+	srv, err := turn.NewServer(turn.ServerConfig{
+		Realm: "test",
+		AuthHandler: func(*turn.RequestAttributes) (string, []byte, bool) {
+			return "user", turn.GenerateAuthKey("user", "test", "pass"), true
+		},
+		PacketConnConfigs: []turn.PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"), Address: "127.0.0.1"},
+		}},
+	})
+	require.NoError(t, err, "TURN server")
+	defer srv.Close() //nolint:errcheck
+
+	pc, err := Dialer{Config: Config{
+		Protocol:   stnrv1.ProtocolTURNUDP,
+		ServerAddr: serverConn.LocalAddr().String(),
+		Username:   "user",
+		Password:   "pass",
+		Realm:      "test",
+	}}.ListenPacket(context.Background(), "udp", "")
+	require.NoError(t, err, "upstream session")
+	defer pc.Close() //nolint:errcheck
+
+	local, remote := pc.(*packetConn).TransportAddrs()
+	require.NotNil(t, local, "transport local address")
+	assert.Equal(t, serverConn.LocalAddr().String(), remote.String(), "server address")
+
+	peer := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9000}
+	_, err = pc.WriteTo([]byte("hello"), peer)
+	require.NoError(t, err, "relayed write")
+
+	// the channel is assigned at the first write and lands at the channel floor (0x4000):
+	// per-session allocations bind a single peer; the async ChannelBind settles within a
+	// round trip
+	assert.Eventually(t, func() bool {
+		addr, ok := pc.(*packetConn).FindAddrByChannelNumber(0x4000)
+		return ok && addr.String() == peer.String()
+	}, 3*time.Second, 50*time.Millisecond, "peer channel found at the floor")
 }
