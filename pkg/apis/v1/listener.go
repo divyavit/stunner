@@ -40,11 +40,8 @@ type ListenerConfig struct {
 	Cert string `json:"cert,omitempty"`
 	// Key is the base64-encoded TLS key.
 	Key string `json:"key,omitempty"`
-	// PeerAddr is the peer address ("host:port", the host may be an IP address or a DNS
-	// name) to which a plain UDP/TCP or STDIN listener relays every client flow. Raw flows
-	// carry no in-band peer address, so the peer is pinned in the listener config.
-	// Mandatory for the plain protocols, ignored for TURN-* (TURN clients address their
-	// peers in-band).
+	// PeerAddr is the peer to which a plain UDP/TCP or STDIN listener relays every client
+	// flow, as "<udp|tcp>://host:port". Ignored for TURN listeners.
 	PeerAddr string `json:"peer_addr,omitempty"`
 	// Routes specifies the list of Routes allowed via a listener.
 	Routes []string `json:"routes,omitempty"`
@@ -107,9 +104,17 @@ func (req *ListenerConfig) Validate() error {
 		if req.PeerAddr == "" {
 			return fmt.Errorf("missing peer address for %s listener", proto.String())
 		}
-		host, port, err := net.SplitHostPort(req.PeerAddr)
+		if i := strings.Index(req.PeerAddr, "://"); i >= 0 {
+			if s := strings.ToLower(req.PeerAddr[:i]); s != "udp" && s != "tcp" {
+				return fmt.Errorf("invalid peer transport %q in peer address %q",
+					s, req.PeerAddr)
+			}
+		}
+		_, hostport := req.PeerEndpoint()
+		host, port, err := net.SplitHostPort(hostport)
 		if err != nil || host == "" {
-			return fmt.Errorf("invalid peer address %q: expecting host:port", req.PeerAddr)
+			return fmt.Errorf("invalid peer address %q: expecting "+
+				"[udp://|tcp://]host:port", req.PeerAddr)
 		}
 		if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
 			return fmt.Errorf("invalid port in peer address %q", req.PeerAddr)
@@ -138,6 +143,21 @@ func (req *ListenerConfig) Validate() error {
 
 	sort.Strings(req.Routes)
 	return nil
+}
+
+// PeerEndpoint returns the transport protocol and the "host:port" endpoint of the peer of a
+// plain listener; a bare peer address defaults to a UDP peer.
+func (req *ListenerConfig) PeerEndpoint() (Protocol, string) {
+	addr := req.PeerAddr
+	proto := ProtocolUDP
+	switch lower := strings.ToLower(addr); {
+	case strings.HasPrefix(lower, "udp://"):
+		addr = addr[len("udp://"):]
+	case strings.HasPrefix(lower, "tcp://"):
+		proto = ProtocolTCP
+		addr = addr[len("tcp://"):]
+	}
+	return proto, addr
 }
 
 // Name returns the name of the object to be configured.

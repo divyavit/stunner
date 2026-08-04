@@ -33,6 +33,7 @@ type Listener struct {
 	rawAddr                string
 	addrs                  []string
 	cert, key              []byte
+	peerAddr               string
 	routes                 []string
 
 	// conf is the atomic snapshot read by the TURN handlers on the request path.
@@ -171,6 +172,7 @@ func (l *Listener) Reconcile(conf stnrv1.Config) error {
 	}
 	l.publicAddr = req.PublicAddr
 	l.publicPort = req.PublicPort
+	l.peerAddr = req.PeerAddr
 
 	l.publicAddrs = make([]string, len(req.PublicAddrs))
 	copy(l.publicAddrs, req.PublicAddrs)
@@ -207,6 +209,7 @@ func (l *Listener) buildConfig() *stnrv1.ListenerConfig {
 		PublicAddr:  l.publicAddr,
 		PublicPort:  l.publicPort,
 		PublicAddrs: publicAddrs,
+		PeerAddr:    l.peerAddr,
 		Routes:      routes,
 	}
 	c.Cert = string(l.cert)

@@ -93,6 +93,33 @@ func TestListenerConfigValidate(t *testing.T) {
 				PeerAddr: "[2001:db8::1]:5678"},
 		},
 		{
+			name: "plain udp listener with a udp peer scheme",
+			conf: ListenerConfig{Name: "listener", Protocol: "udp",
+				PeerAddr: "udp://1.2.3.4:5678"},
+		},
+		{
+			name: "plain udp listener with a tcp peer scheme",
+			conf: ListenerConfig{Name: "listener", Protocol: "udp",
+				PeerAddr: "tcp://1.2.3.4:5678"},
+		},
+		{
+			name: "plain udp listener with an uppercase peer scheme",
+			conf: ListenerConfig{Name: "listener", Protocol: "udp",
+				PeerAddr: "UDP://1.2.3.4:5678"},
+		},
+		{
+			name: "plain udp listener with an invalid peer scheme",
+			conf: ListenerConfig{Name: "listener", Protocol: "udp",
+				PeerAddr: "dtls://1.2.3.4:5678"},
+			err: true,
+		},
+		{
+			name: "plain udp listener with a portless scheme peer",
+			conf: ListenerConfig{Name: "listener", Protocol: "udp",
+				PeerAddr: "udp://1.2.3.4"},
+			err: true,
+		},
+		{
 			name: "plain udp listener without a peer address",
 			conf: ListenerConfig{Name: "listener", Protocol: "udp"},
 			err:  true,
@@ -187,6 +214,27 @@ func TestListenerConfigValidateDefaults(t *testing.T) {
 	assert.Equal(t, "STDIN", s.Protocol, "protocol normalized")
 	assert.Empty(t, s.Addr, "no address default for stdin")
 	assert.Zero(t, s.Port, "no port default for stdin")
+}
+
+func TestListenerConfigPeerEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		addr     string
+		proto    Protocol
+		hostport string
+	}{
+		{"1.2.3.4:5678", ProtocolUDP, "1.2.3.4:5678"},
+		{"udp://1.2.3.4:5678", ProtocolUDP, "1.2.3.4:5678"},
+		{"tcp://1.2.3.4:5678", ProtocolTCP, "1.2.3.4:5678"},
+		{"TCP://media.example.com:5678", ProtocolTCP, "media.example.com:5678"},
+		{"udp://[2001:db8::1]:5678", ProtocolUDP, "[2001:db8::1]:5678"},
+	} {
+		t.Run(tc.addr, func(t *testing.T) {
+			c := ListenerConfig{PeerAddr: tc.addr}
+			proto, hostport := c.PeerEndpoint()
+			assert.Equal(t, tc.proto, proto, "peer transport")
+			assert.Equal(t, tc.hostport, hostport, "peer endpoint")
+		})
+	}
 }
 
 func TestListenerConfigStringPeerAddr(t *testing.T) {

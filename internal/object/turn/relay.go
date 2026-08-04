@@ -48,7 +48,8 @@ func NewRelay(listener string, rt *objruntime.Runtime) *Relay {
 
 // parseRelayAddrs derives a listener's candidate relay addresses (Addrs, at most one per family) and
 // the Addr fallback. "localhost" is not an IP literal, so it is treated as the dual-stack loopback so
-// relayIPFor can still match either family.
+// relayIPFor can still match either family. An empty Addr (STDIN listeners carry no listener
+// address) falls back to the unspecified address: their relayed address is never advertised.
 func parseRelayAddrs(conf *stnrv1.ListenerConfig) (addrs []net.IP, fallback net.IP) {
 	fallback = net.ParseIP(conf.Addr)
 	for _, a := range conf.Addrs {
@@ -56,8 +57,13 @@ func parseRelayAddrs(conf *stnrv1.ListenerConfig) (addrs []net.IP, fallback net.
 			addrs = append(addrs, ip)
 		}
 	}
-	if fallback == nil && len(addrs) == 0 && conf.Addr == "localhost" {
-		addrs = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	if fallback == nil && len(addrs) == 0 {
+		switch conf.Addr {
+		case "localhost":
+			addrs = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+		case "":
+			fallback = net.IPv4zero
+		}
 	}
 	return addrs, fallback
 }
