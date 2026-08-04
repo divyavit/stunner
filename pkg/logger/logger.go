@@ -32,4 +32,7 @@ type Options struct {
 	// Burst is the burst size of the log rate limiter.
 	// If non-positive, the caller should use its own default burst size.
 	Burst int
+	// Writer is the log output stream. If nil, the caller should use its own default
+	// (os.Stdout). Set it to os.Stderr when stdout carries payload (stdin/stdout tunnels).
+	Writer io.Writer
 }

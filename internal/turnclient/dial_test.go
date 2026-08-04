@@ -62,6 +62,14 @@ func TestNewConfig(t *testing.T) {
 		assert.NotEmpty(t, c.Password)
 	})
 
+	t.Run("SNI overrides the server name", func(t *testing.T) {
+		s := &stnrv1.TURNServer{Address: "1.2.3.4", Port: 5349, SNI: "turn.example.com"}
+		c, err := NewConfig(s, stnrv1.ProtocolTURNTLS)
+		require.NoError(t, err)
+		assert.Equal(t, "turn.example.com", c.ServerName, "SNI wins")
+		assert.Equal(t, "1.2.3.4:5349", c.ServerAddr, "dial address unchanged")
+	})
+
 	t.Run("broken auth config fails the dial early", func(t *testing.T) {
 		s := &stnrv1.TURNServer{Address: "1.2.3.4", Port: 3478,
 			Auth: &stnrv1.AuthConfig{Type: "ephemeral"}}

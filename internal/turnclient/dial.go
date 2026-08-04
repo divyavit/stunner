@@ -53,13 +53,19 @@ func NewConfig(s *stnrv1.TURNServer, proto stnrv1.Protocol) (Config, error) {
 			s.HostPort(), err)
 	}
 
+	// the SNI override wins; otherwise the address doubles as the server name (no SNI for
+	// an IP literal: the TLS stack ignores ServerName in that case)
+	serverName := s.Address
+	if s.SNI != "" {
+		serverName = s.SNI
+	}
+
 	c := Config{
 		Protocol:   proto,
 		ServerAddr: s.HostPort(),
 		Username:   user,
 		Password:   pass,
-		// no SNI for an IP literal; the TLS stack ignores ServerName in that case
-		ServerName: s.Address,
+		ServerName: serverName,
 		Insecure:   s.Insecure,
 	}
 	if s.Auth != nil {

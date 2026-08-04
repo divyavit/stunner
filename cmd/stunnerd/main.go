@@ -29,8 +29,29 @@ var (
 	buildDate  = "<unknown>"
 )
 
+const usage = `stunnerd: the STUNner gateway dataplane
+
+Usage (the positional argument count selects the mode):
+    stunnerd [options]
+        Run the dataplane daemon, taking configuration from the config origin (-c).
+    stunnerd [options] <turn-listener-uri>
+        Run a standalone TURN server with a default configuration, e.g.
+        stunnerd turn://user:pass@127.0.0.1:3478?transport=udp
+    stunnerd [options] <client-addr> <turn-server-addr> <peer-addr>
+        Tunnel a local client to a peer through a remote TURN server:
+        client-addr: <udp|tcp>://<addr>:<port>, or "-" to tunnel stdin/stdout
+        turn-server-addr: turn://<auth>@<addr>:<port>[?transport=udp|tcp|tls|dtls]
+                          or k8s://<gw-namespace>/<gw-name>:<listener>
+        peer-addr: <udp|tcp>://<addr>:<port>
+                   or k8s://<namespace>/<service>:<port-name-or-number>
+        auth: <username:password|secret>
+
+Options:
+`
+
 func main() {
 	os.Args[0] = "stunnerd"
+
 	var config = flag.StringP("config", "c", "", "Config origin, either a valid address in the format IP:port, or HTTP URL to the CDS server, or literal \"k8s\" to discover the CDS server from Kubernetes, or a proper file name URI in the format file://<path-to-config-file> (overrides: STUNNER_CONFIG_ORIGIN)")
 	var level = flag.StringP("log", "l", "", "Log level (format: <scope>:<level>, overrides: PION_LOG_*, default: all:INFO)")
 	var logFormat = flag.String("log-format", "text", `Log output format: "text" (default) or "json"`)
@@ -41,6 +62,8 @@ func main() {
 	var dryRun = flag.BoolP("dry-run", "d", false, "Suppress side-effects, intended for testing (default: false)")
 	var forceReadyDuringTermination = flag.Bool("force-ready-status", false, "Prevent the server from failing the liveness probe during graceful shutdown as a workaround for buggy kube-proxy implementations (default: false)")
 	var verbose = flag.BoolP("verbose", "v", false, "Verbose logging, identical to <-l all:DEBUG>")
+	var sni = flag.String("sni", "", "Server name (SNI) for the TURN/TLS and TURN/DTLS transports (tunnel mode)")
+	var insecure = flag.Bool("insecure", false, "Accept self-signed TURN server TLS certificates (tunnel mode, default: false)")
 
 	// Kubernetes config flags
 	k8sConfigFlags := cliopt.NewConfigFlags(true)
@@ -49,6 +72,11 @@ func main() {
 	// CDS server discovery flags
 	cdsConfigFlags := cdsclient.NewCDSConfigFlags()
 	cdsConfigFlags.AddFlags(flag.CommandLine)
+
+	flag.Usage = func() {
+		fmt.Fprint(os.Stderr, usage)
+		flag.PrintDefaults()
+	}
 
 	flag.Parse()
 
@@ -59,6 +87,25 @@ func main() {
 
 	if *level != "" {
 		logLevel = *level
+	}
+
+	// Three positional arguments select tunnel mode, with turncat's argument shape. The
+	// tunnel is a pipe-friendly CLI: quiet by default, unless a log level is set.
+	if flag.NArg() == 3 {
+		if !*verbose && *level == "" {
+			logLevel = "all:WARN"
+		}
+		runTunnel(flag.Arg(0), flag.Arg(1), flag.Arg(2), tunnelOptions{
+			sni:       *sni,
+			insecure:  *insecure,
+			logLevel:  logLevel,
+			logFormat: *logFormat,
+		}, k8sConfigFlags, cdsConfigFlags)
+		return
+	}
+	if flag.NArg() > 1 {
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	configOrigin := stnrv1.DefaultConfigDiscoveryAddress

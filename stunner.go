@@ -83,6 +83,9 @@ func NewStunner(options Options) *Stunner {
 	if options.LogOptions.Level != "" {
 		logFactory.SetLevel(options.LogOptions.Level)
 	}
+	if options.LogOptions.Writer != nil {
+		logFactory.SetWriter(options.LogOptions.Writer)
+	}
 	log := logFactory.NewLogger("stunner")
 
 	r := options.Resolver
