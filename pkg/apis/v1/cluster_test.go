@@ -171,6 +171,44 @@ func TestClusterConfigValidate(t *testing.T) {
 			},
 			err: true,
 		},
+		{
+			name: "turn-tls cluster with SNI",
+			conf: ClusterConfig{
+				Name:     "cluster",
+				Protocol: "turn-tls",
+				TURNServer: &TURNServer{Address: "1.2.3.4", Port: 5349,
+					SNI: "turn.example.com"},
+			},
+		},
+		{
+			name: "turn-dtls cluster with SNI",
+			conf: ClusterConfig{
+				Name:     "cluster",
+				Protocol: "turn-dtls",
+				TURNServer: &TURNServer{Address: "1.2.3.4", Port: 5349,
+					SNI: "turn.example.com"},
+			},
+		},
+		{
+			name: "turn-udp cluster with SNI",
+			conf: ClusterConfig{
+				Name:     "cluster",
+				Protocol: "turn-udp",
+				TURNServer: &TURNServer{Address: "1.2.3.4", Port: 3478,
+					SNI: "turn.example.com"},
+			},
+			err: true,
+		},
+		{
+			name: "turn-tcp cluster with SNI",
+			conf: ClusterConfig{
+				Name:     "cluster",
+				Protocol: "turn-tcp",
+				TURNServer: &TURNServer{Address: "1.2.3.4", Port: 3478,
+					SNI: "turn.example.com"},
+			},
+			err: true,
+		},
 	}
 
 	for _, tc := range testCases {

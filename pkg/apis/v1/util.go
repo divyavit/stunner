@@ -76,6 +76,7 @@ const (
 	ProtocolIP
 	ProtocolIP4
 	ProtocolFILE
+	ProtocolSTDIN
 )
 
 const (
@@ -95,6 +96,7 @@ const (
 	protocolIPStr         = "IP"
 	protocolIP4Str        = "IP4"
 	protocolFILEStr       = "FILE"
+	protocolSTDINStr      = "STDIN"
 )
 
 // NewProtocol parses a protocol name into a Protocol. It is permissive: it accepts any known
@@ -135,6 +137,8 @@ func NewProtocol(raw string) (Protocol, error) {
 		return ProtocolIP4, nil
 	case protocolFILEStr:
 		return ProtocolFILE, nil
+	case protocolSTDINStr:
+		return ProtocolSTDIN, nil
 	default:
 		return ProtocolUnknown, fmt.Errorf("unknown protocol: \"%s\"", raw)
 	}
@@ -175,6 +179,8 @@ func (p Protocol) String() string {
 		return protocolIP4Str
 	case ProtocolFILE:
 		return protocolFILEStr
+	case ProtocolSTDIN:
+		return protocolSTDINStr
 	default:
 		return "<unknown>"
 	}
@@ -200,7 +206,7 @@ const (
 func NewListenerProtocol(raw string) (Protocol, error) {
 	if p, err := NewProtocol(raw); err == nil {
 		switch p {
-		case ProtocolUDP, ProtocolTCP, ProtocolTLS, ProtocolDTLS,
+		case ProtocolUDP, ProtocolTCP, ProtocolTLS, ProtocolDTLS, ProtocolSTDIN,
 			ProtocolTURNUDP, ProtocolTURNTCP, ProtocolTURNTLS, ProtocolTURNDTLS:
 			return p, nil
 		}

@@ -53,6 +53,10 @@ type TURNServer struct {
 	// Insecure allows TLS certificate verification to be skipped for the TURN-TLS and
 	// TURN-DTLS transports.
 	Insecure bool `json:"insecure,omitempty"`
+	// SNI overrides the server name used for TLS/DTLS certificate verification when it
+	// differs from Address (e.g. when the server is addressed by an IP literal). Valid only
+	// for clusters reaching the server over the TURN-TLS or TURN-DTLS transport.
+	SNI string `json:"sni,omitempty"`
 }
 
 // HostPort returns the server's address in the "host:port" form the TURN client dials, bracketing
@@ -138,6 +142,10 @@ func (req *ClusterConfig) Validate() error {
 		if err := req.TURNServer.Validate(); err != nil {
 			return fmt.Errorf("%w in cluster configuration: %s", err, req.String())
 		}
+		if req.TURNServer.SNI != "" && p != ProtocolTURNTLS && p != ProtocolTURNDTLS {
+			return fmt.Errorf("TURN server SNI set for the non-TLS %q protocol in "+
+				"cluster configuration: %s", req.Protocol, req.String())
+		}
 	} else if req.TURNServer != nil {
 		return fmt.Errorf("TURN server set in %q protocol cluster configuration: %s",
 			req.Protocol, req.String())
@@ -193,6 +201,9 @@ func (req *ClusterConfig) String() string {
 
 	if req.TURNServer != nil {
 		status = append(status, fmt.Sprintf("turn-server=%q", req.TURNServer.HostPort()))
+		if req.TURNServer.SNI != "" {
+			status = append(status, fmt.Sprintf("turn-server-sni=%q", req.TURNServer.SNI))
+		}
 		if req.TURNServer.Auth != nil {
 			// AuthConfig.String redacts the credentials for us
 			status = append(status, "turn-server-auth="+req.TURNServer.Auth.String())

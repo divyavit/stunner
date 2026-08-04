@@ -13,10 +13,10 @@ import (
 type ListenerConfig struct {
 	// Name of the listener.
 	Name string `json:"name,omitempty"`
-	// Protocol is the transport protocol ("UDP", "TCP", "TLS", "DTLS") or the complete L4/L7
-	// protocol stack ("TURN-UDP", "TURN-TCP", "TURN-TLS", "TURN-DTLS") used by the listener.
-	// The application-layer protocol on top of the transport protocol is always TURN, so "UDP"
-	// and "TURN-UDP" are equivalent (and so on for the other protocols). Default is
+	// Protocol is the listener protocol. The TURN protocols ("TURN-UDP", "TURN-TCP",
+	// "TURN-TLS", "TURN-DTLS") serve TURN over the given transport. The plain protocols
+	// ("UDP", "TCP") relay every client flow to the static peer address in PeerAddr, and
+	// "STDIN" relays a single flow between the stdin/stdout pair and PeerAddr. Default is
 	// "TURN-UDP".
 	Protocol string `json:"protocol,omitempty"`
 	// PublicAddr is the Internet-facing public address for the listener (ignored by STUNner). It
@@ -40,6 +40,12 @@ type ListenerConfig struct {
 	Cert string `json:"cert,omitempty"`
 	// Key is the base64-encoded TLS key.
 	Key string `json:"key,omitempty"`
+	// PeerAddr is the peer address ("host:port", the host may be an IP address or a DNS
+	// name) to which a plain UDP/TCP or STDIN listener relays every client flow. Raw flows
+	// carry no in-band peer address, so the peer is pinned in the listener config.
+	// Mandatory for the plain protocols, ignored for TURN-* (TURN clients address their
+	// peers in-band).
+	PeerAddr string `json:"peer_addr,omitempty"`
 	// Routes specifies the list of Routes allowed via a listener.
 	Routes []string `json:"routes,omitempty"`
 }
@@ -60,15 +66,28 @@ func (req *ListenerConfig) Validate() error {
 	}
 	req.Protocol = proto.String()
 
-	if req.Addr == "" {
-		req.Addr = "0.0.0.0"
-	}
+	// STDIN listeners serve the single pre-accepted stdin/stdout flow: there is no
+	// listener socket, so no address, port, or TLS credentials.
+	if proto == ProtocolSTDIN {
+		if req.Addr != "" || req.Port != 0 {
+			return fmt.Errorf("address/port set for %s listener: %s", proto.String(),
+				req.String())
+		}
+		if req.Cert != "" || req.Key != "" {
+			return fmt.Errorf("TLS cert/key set for %s listener: %s", proto.String(),
+				req.String())
+		}
+	} else {
+		if req.Addr == "" {
+			req.Addr = "0.0.0.0"
+		}
 
-	if req.Port == 0 {
-		req.Port = DefaultPort
-	}
-	if req.Port <= 0 || req.Port > 65535 {
-		return fmt.Errorf("invalid port: %d", req.Port)
+		if req.Port == 0 {
+			req.Port = DefaultPort
+		}
+		if req.Port <= 0 || req.Port > 65535 {
+			return fmt.Errorf("invalid port: %d", req.Port)
+		}
 	}
 
 	if proto == ListenerProtocolTURNTLS || proto == ListenerProtocolTURNDTLS ||
@@ -78,6 +97,22 @@ func (req *ListenerConfig) Validate() error {
 		}
 		if req.Key == "" {
 			return fmt.Errorf("empty TLS key for %s listener", proto.String())
+		}
+	}
+
+	// Plain listeners relay every client flow to a single static peer: raw flows carry no
+	// in-band peer address. TURN-* listeners take their peer addresses in-band, so PeerAddr
+	// is ignored there.
+	if proto == ProtocolUDP || proto == ProtocolTCP || proto == ProtocolSTDIN {
+		if req.PeerAddr == "" {
+			return fmt.Errorf("missing peer address for %s listener", proto.String())
+		}
+		host, port, err := net.SplitHostPort(req.PeerAddr)
+		if err != nil || host == "" {
+			return fmt.Errorf("invalid peer address %q: expecting host:port", req.PeerAddr)
+		}
+		if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("invalid port in peer address %q", req.PeerAddr)
 		}
 	}
 
@@ -151,6 +186,10 @@ func (req *ListenerConfig) String() string {
 		p = fmt.Sprintf("%d", req.PublicPort)
 	}
 	status = append(status, fmt.Sprintf("public=%s", net.JoinHostPort(a, p)))
+
+	if req.PeerAddr != "" {
+		status = append(status, fmt.Sprintf("peer=%s", req.PeerAddr))
+	}
 
 	c, k := "-", "-"
 	if req.Cert != "" {

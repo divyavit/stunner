@@ -1744,8 +1744,8 @@ func testConfigListener(id, realm string) server.Config {
 	c := client.ZeroConfig(id)
 	c.Auth.Realm = realm
 	c.Listeners = []stnrv1.ListenerConfig{
-		{Name: "l1", Protocol: "TCP", Addr: "1.1.1.1", Port: 3478},
-		{Name: "l2", Protocol: "UDP", Addr: "1.1.1.2", Port: 3479},
+		{Name: "l1", Protocol: "TURN-TCP", Addr: "1.1.1.1", Port: 3478},
+		{Name: "l2", Protocol: "TURN-UDP", Addr: "1.1.1.2", Port: 3479},
 	}
 	_ = c.Validate() // make sure deepeq works
 	namespace, name, _ := server.NamespacedName(id)
