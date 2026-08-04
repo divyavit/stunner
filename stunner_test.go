@@ -860,6 +860,22 @@ func TestStunnerServerLocalhost(t *testing.T) {
 	testStunnerLocalhost(t, 1, TestStunnerConfigsWithLocalhost)
 }
 
+// freePort reserves a kernel-allocated port on the given network's wildcard address and
+// releases it for reuse.
+func freePort(t *testing.T, network string) int {
+	t.Helper()
+	if network == "udp" {
+		c, err := net.ListenPacket("udp", ":0")
+		require.NoError(t, err, "free port")
+		defer func() { _ = c.Close() }()
+		return c.LocalAddr().(*net.UDPAddr).Port
+	}
+	l, err := net.Listen("tcp", ":0")
+	require.NoError(t, err, "free port")
+	defer func() { _ = l.Close() }()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
 func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerConfigCase) {
 	lim := test.TimeOut(time.Second * 30)
 	defer lim.Stop()
@@ -899,6 +915,19 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 			assert.NoError(t, err, "NewURIFromListener")
 			assert.Equal(t, test.uri, luri.AsRFC7065String(), "listener uri")
 
+			// Each case binds a fresh kernel-allocated listener port: with a fixed
+			// port, a case can race the asynchronous socket release of its
+			// predecessor (a DTLS listener closes its UDP socket only after the last
+			// accepted conn has died).
+			network := "udp"
+			if p := c.Listeners[0].Protocol; p == "turn-tcp" || p == "turn-tls" {
+				network = "tcp"
+			}
+			port := freePort(t, network)
+			for i := range c.Listeners {
+				c.Listeners[i].Port = port
+			}
+
 			log.Debug("creating a stunnerd")
 			stunner := NewStunner(Options{
 				LogOptions:           LogOptions{Level: stunnerTestLoglevel},
@@ -926,7 +955,7 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 			if ip := net.ParseIP(c.Listeners[0].Addr); ip != nil && ip.To4() == nil {
 				host, wildcard, fam = "::1", "[::]:0", "6"
 			}
-			stunnerAddr := net.JoinHostPort(host, "23478")
+			stunnerAddr := net.JoinHostPort(host, strconv.Itoa(port))
 			echoServerAddr := net.JoinHostPort(host, "25678")
 			if test.echoServerAddr != "" {
 				echoServerAddr = test.echoServerAddr
@@ -960,7 +989,7 @@ func testStunnerLocalhost(t *testing.T, udpThreadNum int, tests []TestStunnerCon
 				cer, err := tls.X509KeyPair(certPem, keyPem)
 				assert.NoError(t, err, "cannot create certificate for DTLS client socket")
 				// for some reason dtls.Listen requires a UDPAddr and not an addr string
-				udpAddr := &net.UDPAddr{IP: net.ParseIP(host), Port: 23478}
+				udpAddr := &net.UDPAddr{IP: net.ParseIP(host), Port: port}
 				conn, err := dtls.Dial("udp"+fam, udpAddr, &dtls.Config{
 					Certificates:       []tls.Certificate{cer},
 					InsecureSkipVerify: true,
