@@ -12,8 +12,8 @@ If you have a Kubernetes cluster up and running, the installation and measuremen
 The tools used in the measurement are the following:
 
 * `iperf`: Used for creating traffic flows between the clients and the server.
-* `turncat`: Used for opening a connection through STUNner to the iperf server.
-* `STUNner`: Our TURN server exposed to `turncat` clients.
+* `stunnerd` (tunnel mode): Used for opening a connection through STUNner to the iperf server.
+* `STUNner`: Our TURN server exposed to the tunnel clients.
 
 ## Measurement Setup
 
@@ -25,7 +25,7 @@ All the components are running locally using localhost to simulate the network.
 
 ### Kubernetes setup
 
-`iperf` and `turncat` clients are running locally, both `STUNner` and `iperf` server are running inside a Kubernetes Cluster in a pod.
+`iperf` and tunnel clients are running locally, both `STUNner` and `iperf` server are running inside a Kubernetes Cluster in a pod.
 
 ![STUNner benchmark Kubernetes test architecture](../../img/stunner_benchmark_k8s.svg)
 
@@ -39,7 +39,7 @@ You are good to go. No installation steps required.
 
 ## Install on Kubernetes
 
-Configure STUNner to act as a STUN server towards [`turncat`](../../cmd/turncat.md) clients, and to let `iperf` client's traffic reach the `iperf` server.
+Configure STUNner to act as a STUN server towards [tunnel](../../cmd/stunnerd.md#tunnel-mode) clients, and to let `iperf` client's traffic reach the `iperf` server.
 
 ```
 kubectl apply -f iperf-server.yaml
@@ -53,7 +53,7 @@ kubectl apply -f performance-stunner.yaml
 We bundle a helper script for executing performance measurements. The script uses optional arguments. The flags are the following:
 
 - `-h` Show help text
-- `-n` Number of `turncat` clients (more of them can be used, this way each client will forward lesser traffic and none of them becomes the bottleneck while measuring)
+- `-n` Number of tunnel clients (more of them can be used, this way each client will forward lesser traffic and none of them becomes the bottleneck while measuring)
 - `-t` Time in seconds to transmit for
 - `-s` Size of the packet in bytes
 - `-b` Bandwidth to send in bits/sec
@@ -68,14 +68,14 @@ We bundle a helper script for executing performance measurements. The script use
 The below command will open:
 
 - a `stunnerd` UDP listener at `127.0.0.1:5001`
-- one or more `turncat` clients at `127.0.0.1:90XY` (90XY are ports used for measurement purposes starting from 9000) to open a connection through STUNner to the iperf server
+- one or more tunnel clients at `127.0.0.1:90XY` (90XY are ports used for measurement purposes starting from 9000) to open a connection through STUNner to the iperf server
 - an `iperf` server at `127.0.0.1:5000`
 - an `iperf` client sending its traffic to the turn
 
 An example for:
 
 - a local benchmark
-- 5 turncats
+- 5 tunnel clients
 - 5 seconds of evaluation time
 - 1000 byte packets
 - 100 Mbits/sec
@@ -86,7 +86,7 @@ An example for:
 
 The below command will open:
 
-- one or more `turncat` clients at `127.0.0.1:90XY` (90XY are ports used for measurement purposes starting from 9000) to open a connection through STUNner to the iperf server. Traffic will be forwarded to the STUNner public address obtained from STUNner configuration
+- one or more tunnel clients at `127.0.0.1:90XY` (90XY are ports used for measurement purposes starting from 9000) to open a connection through STUNner to the iperf server. Traffic will be forwarded to the STUNner public address obtained from STUNner configuration
 - an `iperf` client sending its traffic to the turn
 
 `STUNner` and `iperf` are running inside the Kubernetes Cluster.
@@ -94,7 +94,7 @@ The below command will open:
 An example for:
 
 - a Kubernetes benchmark
-- 5 turncats
+- 5 tunnel clients
 - 5 seconds of evaluation time
 - 1000 byte packets
 - 100 Mbits/sec
@@ -116,10 +116,10 @@ Next, we see an example output for a local measurement and a measurement in Kube
 In a local measurement the output contains a single summarized test.
 You should see a similar output:
 ```
-Number of concurrent turncat clients: 5
+Number of concurrent tunnel clients: 5
 Evaluation time: 1 sec
 Packet size: 1000 bytes
-Bandwidth: 10000 Kbits/sec or 10 Mbits/sec per turncat client
+Bandwidth: 10000 Kbits/sec or 10 Mbits/sec per tunnel client
 Platform: local
 Results
 [ ID] Interval            Transfer     Bandwidth        Jitter   Lost/Total  Latency avg/min/max/stdev PPS NetPwr
@@ -136,10 +136,10 @@ Results
 
 In case of a Kubernetes measurement, the output contains one or more summarized tests. In case the user reruns the script, `iperf` outputs will be appended. You should see an output similar to this:
 ```
-Number of concurrent turncat clients: 5
+Number of concurrent tunnel clients: 5
 Evaluation time: 1 sec
 Packet size: 1000 bytes
-Bandwidth: 1000 Kbits/sec or 1 Mbits/sec per turncat client
+Bandwidth: 1000 Kbits/sec or 1 Mbits/sec per tunnel client
 Platform: k8s
 Results
 [ ID] Interval            Transfer     Bandwidth        Jitter   Lost/Total  Latency avg/min/max/stdev PPS  inP NetPwr

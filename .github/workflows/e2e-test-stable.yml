@@ -11,11 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install turncat
-        run: |
-          URL=`wget -q -O - https://api.github.com/repos/l7mp/stunner/releases/latest  |  jq -r '.assets[] | select(.name | contains ("turncat")) | select(.name | contains ("linux")) | select(.name | contains ("amd64"))  | .browser_download_url'`
-          wget $URL -O turncat
-          chmod a+x turncat
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Build stunnerd
+        run: CGO_ENABLED=0 go build -ldflags="-w -s" -o stunnerd ./cmd/stunnerd
 
       - name: Start minikube
         uses: medyagh/setup-minikube@master
@@ -58,9 +60,9 @@ jobs:
           kubectl wait -n stunner --for=condition=Available deployment udp-gateway --timeout 5m
           kubectl get all -A
 
-      - name: Start turncat
+      - name: Start the tunnel
         run: |
-          ./turncat --log=all:INFO udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://$(kubectl get svc iperf-server -o jsonpath="{.spec.clusterIP}"):5001 &>turncat.log &
+          ./stunnerd --log=all:INFO udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://$(kubectl get svc iperf-server -o jsonpath="{.spec.clusterIP}"):5001 &>tunnel.log &
           sleep 1
 
       - name: Run iperf client
@@ -76,8 +78,8 @@ jobs:
           kubectl logs $(kubectl get pods -l app=iperf-server -o jsonpath='{.items[0].metadata.name}')
           echo "* MINIKUBE TUNNEL"
           cat mktunnel.log
-          echo "* TURNCAT"
-          cat turncat.log
+          echo "* TUNNEL"
+          cat tunnel.log
           echo "* STUNNER"
           kubectl logs -n stunner $(kubectl get pods -n stunner -l app=stunner -o jsonpath='{.items[0].metadata.name}')
           echo "* STUNNER-GATEWAY=OPERATOR"

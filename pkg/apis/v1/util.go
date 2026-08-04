@@ -68,35 +68,19 @@ const (
 	ProtocolTURNTCP
 	ProtocolTURNTLS
 	ProtocolTURNDTLS
-	ProtocolUDP4
-	ProtocolTCP4
-	ProtocolUNIX
-	ProtocolUNIXGRAM
-	ProtocolUNIXPACKET
-	ProtocolIP
-	ProtocolIP4
-	ProtocolFILE
 	ProtocolSTDIN
 )
 
 const (
-	protocolUDPStr        = "UDP"
-	protocolTCPStr        = "TCP"
-	protocolTLSStr        = "TLS"
-	protocolDTLSStr       = "DTLS"
-	protocolTURNUDPStr    = "TURN-UDP"
-	protocolTURNTCPStr    = "TURN-TCP"
-	protocolTURNTLSStr    = "TURN-TLS"
-	protocolTURNDTLSStr   = "TURN-DTLS"
-	protocolUDP4Str       = "UDP4"
-	protocolTCP4Str       = "TCP4"
-	protocolUNIXStr       = "UNIX"
-	protocolUNIXGRAMStr   = "UNIXGRAM"
-	protocolUNIXPACKETStr = "UNIXPACKET"
-	protocolIPStr         = "IP"
-	protocolIP4Str        = "IP4"
-	protocolFILEStr       = "FILE"
-	protocolSTDINStr      = "STDIN"
+	protocolUDPStr      = "UDP"
+	protocolTCPStr      = "TCP"
+	protocolTLSStr      = "TLS"
+	protocolDTLSStr     = "DTLS"
+	protocolTURNUDPStr  = "TURN-UDP"
+	protocolTURNTCPStr  = "TURN-TCP"
+	protocolTURNTLSStr  = "TURN-TLS"
+	protocolTURNDTLSStr = "TURN-DTLS"
+	protocolSTDINStr    = "STDIN"
 )
 
 // NewProtocol parses a protocol name into a Protocol. It is permissive: it accepts any known
@@ -121,22 +105,6 @@ func NewProtocol(raw string) (Protocol, error) {
 		return ProtocolTURNTLS, nil
 	case protocolTURNDTLSStr:
 		return ProtocolTURNDTLS, nil
-	case protocolUDP4Str:
-		return ProtocolUDP4, nil
-	case protocolTCP4Str:
-		return ProtocolTCP4, nil
-	case protocolUNIXStr:
-		return ProtocolUNIX, nil
-	case protocolUNIXGRAMStr:
-		return ProtocolUNIXGRAM, nil
-	case protocolUNIXPACKETStr:
-		return ProtocolUNIXPACKET, nil
-	case protocolIPStr:
-		return ProtocolIP, nil
-	case protocolIP4Str:
-		return ProtocolIP4, nil
-	case protocolFILEStr:
-		return ProtocolFILE, nil
 	case protocolSTDINStr:
 		return ProtocolSTDIN, nil
 	default:
@@ -163,22 +131,6 @@ func (p Protocol) String() string {
 		return protocolTURNTLSStr
 	case ProtocolTURNDTLS:
 		return protocolTURNDTLSStr
-	case ProtocolUDP4:
-		return protocolUDP4Str
-	case ProtocolTCP4:
-		return protocolTCP4Str
-	case ProtocolUNIX:
-		return protocolUNIXStr
-	case ProtocolUNIXGRAM:
-		return protocolUNIXGRAMStr
-	case ProtocolUNIXPACKET:
-		return protocolUNIXPACKETStr
-	case ProtocolIP:
-		return protocolIPStr
-	case ProtocolIP4:
-		return protocolIP4Str
-	case ProtocolFILE:
-		return protocolFILEStr
 	case ProtocolSTDIN:
 		return protocolSTDINStr
 	default:

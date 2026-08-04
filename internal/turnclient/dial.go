@@ -1,6 +1,6 @@
 // Package turnclient opens client sessions on an upstream TURN server over any of the TURN
-// transports (TURN-UDP, TURN-TCP, TURN-TLS, TURN-DTLS). It is the shared TURN-client machinery
-// under the turncat utility and the TURN-* protocol relay clusters.
+// transports (TURN-UDP, TURN-TCP, TURN-TLS, TURN-DTLS). It is the TURN-client machinery under
+// the TURN-* protocol relay clusters.
 package turnclient
 
 import (

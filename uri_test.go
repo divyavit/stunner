@@ -23,7 +23,7 @@ func TestUpgradeTurnURI(t *testing.T) {
 		{"already hierarchical turns", "turns://h:1", "turns://h:1"},
 		{"non-turn scheme untouched", "http://1.2.3.4", "http://1.2.3.4"},
 		{"turnfoo not matched", "turnfoo:1.2.3.4", "turnfoo:1.2.3.4"},
-		{"stdin untouched", "-", "-"},
+		{"dash untouched", "-", "-"},
 		{"empty", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestParseURI(t *testing.T) {
 		{name: "rfc7065 default port", uri: "turn:1.2.3.4?transport=udp",
 			proto: "TURN-UDP", address: "1.2.3.4", port: 3478, network: "udp"},
 
-		// plain transport schemes (turncat listener/peer, not TURN)
+		// plain transport schemes (tunnel client addresses, not TURN)
 		{name: "plain udp", uri: "udp://1.2.3.4:5000",
 			proto: "UDP", address: "1.2.3.4", port: 5000, network: "udp", addr: "1.2.3.4:5000"},
 		{name: "plain tcp", uri: "tcp://1.2.3.4:5000",
@@ -102,11 +102,8 @@ func TestParseURI(t *testing.T) {
 		{name: "uppercase scheme opaque", uri: "TURN:1.2.3.4:5555?transport=tcp",
 			proto: "TURN-TCP", address: "1.2.3.4", port: 5555, network: "tcp"},
 
-		// stdin
-		{name: "stdin dash", uri: "-", proto: "file", port: 1},
-		{name: "stdin file", uri: "file://-", proto: "file", port: 1},
-
 		// error cases
+		{name: "unix scheme rejected", uri: "unix:///tmp/socket", wantErr: true},
 		{name: "unbracketed ipv6 rejected", uri: "turn://2001:db8::1:3478?transport=udp", wantErr: true},
 		{name: "unbracketed ipv6 opaque rejected", uri: "turn:2001:db8::1:3478?transport=udp", wantErr: true},
 		{name: "invalid scheme", uri: "http://1.2.3.4:3478", wantErr: true},

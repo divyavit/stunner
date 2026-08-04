@@ -125,29 +125,47 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 		}
 	}()
 
-	log.Debug("creating a turncat client")
-	clientProto, turnScheme := "tcp", "turn"
+	log.Debug("creating a tunnel client")
+	clientProto := "TCP"
 	if proto == "turn-udp" || proto == "turn-dtls" {
-		clientProto = "udp"
+		clientProto = "UDP"
 	}
-	if proto == "turn-tls" || proto == "turn-dtls" {
-		turnScheme = "turns"
+	noHealthCheck := ""
+	tunnel := NewStunner(Options{
+		Name:             "tunnel",
+		LogOptions:       LogOptions{Level: stunnerTestLoglevel},
+		SuppressRollback: true,
+	})
+	defer tunnel.Close()
+	if err := tunnel.Reconcile(&stnrv1.StunnerConfig{
+		ApiVersion: stnrv1.ApiVersion,
+		Admin: stnrv1.AdminConfig{
+			LogLevel:            stunnerTestLoglevel,
+			HealthCheckEndpoint: &noHealthCheck,
+		},
+		Auth: stnrv1.AuthConfig{Type: "none"},
+		Listeners: []stnrv1.ListenerConfig{{
+			Name:     "tunnel-listener",
+			Protocol: clientProto,
+			Addr:     "127.0.0.1",
+			Port:     25000,
+			PeerAddr: "127.0.0.1:65432",
+			Routes:   []string{"tunnel-cluster"},
+		}},
+		Clusters: []stnrv1.ClusterConfig{{
+			Name:     "tunnel-cluster",
+			Protocol: proto,
+			TURNServer: &stnrv1.TURNServer{
+				Address: "127.0.0.1",
+				Port:    23478,
+				Auth: &stnrv1.AuthConfig{Type: "static", Credentials: map[string]string{
+					"username": "user1", "password": "passwd1"}},
+				Insecure: true,
+			},
+		}},
+	}); err != nil {
+		b.Fatalf("Failed to create tunnel client: %s", err)
 	}
-	stunnerURI := fmt.Sprintf("%s://127.0.0.1:23478?transport=%s", turnScheme, clientProto)
-	testTurncatConfig := TurncatConfig{
-		ListenerAddr:  fmt.Sprintf("%s://127.0.0.1:25000", clientProto),
-		ServerAddr:    stunnerURI,
-		PeerAddr:      "udp://localhost:65432",
-		Auth:          staticAuth,
-		LoggerFactory: loggerFactory,
-		InsecureMode:  true,
-	}
-
-	turncat, err := NewTurncat(&testTurncatConfig)
-	if err != nil {
-		b.Fatalf("Failed to create turncat client: %s", err)
-	}
-	defer turncat.Close()
 
 	// test with 20 clients
 	log.Debugf("creating %d senders", clientNum)
@@ -155,12 +173,12 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 	for i := 0; i < clientNum; i++ {
 		var client net.Conn
 		var err error
-		if clientProto == "udp" {
-			turncatAddr, _ := net.ResolveUDPAddr("udp4", "127.0.0.1:25000") //nolint:errcheck
-			client, err = net.DialUDP("udp", nil, turncatAddr)
+		if clientProto == "UDP" {
+			tunnelAddr, _ := net.ResolveUDPAddr("udp4", "127.0.0.1:25000") //nolint:errcheck
+			client, err = net.DialUDP("udp", nil, tunnelAddr)
 		} else {
-			turncatAddr, _ := net.ResolveTCPAddr("tcp4", "127.0.0.1:25000") //nolint:errcheck
-			client, err = net.DialTCP("tcp", nil, turncatAddr)
+			tunnelAddr, _ := net.ResolveTCPAddr("tcp4", "127.0.0.1:25000") //nolint:errcheck
+			client, err = net.DialTCP("tcp", nil, tunnelAddr)
 		}
 		if err != nil {
 			b.Fatalf("Failed to allocate client socket: %s", err)
@@ -168,10 +186,10 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 		clients[i] = client
 	}
 
-	// Kick turncat so that it creates the allocation for us
+	// Kick the tunnel so that it creates the flows and upstream allocations for us
 	for i := 0; i < clientNum; i++ {
 		if _, err := clients[i].Write(initSeq); err != nil {
-			b.Fatalf("Client %d create allocation via turncat: %s", i, err)
+			b.Fatalf("Client %d create allocation via the tunnel: %s", i, err)
 		}
 	}
 
@@ -181,7 +199,7 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 	for j := 0; j < b.N; j++ {
 		for i := 0; i < clientNum; i++ {
 			if _, err := clients[i].Write(testSeq); err != nil {
-				b.Fatalf("Client %d cannot send to turncat: %s", i, err)
+				b.Fatalf("Client %d cannot send to the tunnel: %s", i, err)
 			}
 		}
 	}
@@ -194,7 +212,7 @@ func RunBenchmarkServer(b *testing.B, proto string, udpThreadNum int) {
 }
 
 // BenchmarkUDPServer will benchmark the STUNner UDP server with a different number of readloop
-// threads. Setup: `client --udp--> turncat --udp--> stunner --udp--> sink`
+// threads. Setup: `client --udp--> tunnel --udp--> stunner --udp--> sink`
 func BenchmarkUDPServer(b *testing.B) {
 	for i := 1; i <= 4; i++ {
 		b.Run(fmt.Sprintf("udp:thread_num=%d", i), func(b *testing.B) {
@@ -204,7 +222,7 @@ func BenchmarkUDPServer(b *testing.B) {
 }
 
 // BenchmarkTCPServer will benchmark the STUNner TCP server with a different number of readloop
-// threads. Setup: `client --tcp--> turncat --tcp--> stunner --udp--> sink`
+// threads. Setup: `client --tcp--> tunnel --tcp--> stunner --udp--> sink`
 func BenchmarkTCPServer(b *testing.B) {
 	b.Run("tcp", func(b *testing.B) {
 		RunBenchmarkServer(b, "turn-tcp", 0)
@@ -212,7 +230,7 @@ func BenchmarkTCPServer(b *testing.B) {
 }
 
 // BenchmarkTLSServer will benchmark the STUNner TLS server with a different number of readloop
-// threads. Setup: `client --tcp--> turncat --tls--> stunner --udp--> sink`
+// threads. Setup: `client --tcp--> tunnel --tls--> stunner --udp--> sink`
 func BenchmarkTLSServer(b *testing.B) {
 	b.Run("tls", func(b *testing.B) {
 		RunBenchmarkServer(b, "turn-tls", 0)
@@ -220,7 +238,7 @@ func BenchmarkTLSServer(b *testing.B) {
 }
 
 // BenchmarkDTLSServer will benchmark the STUNner DTLS server with a different number of readloop
-// threads. Setup: `client --udp--> turncat --dtls--> stunner --udp--> sink`
+// threads. Setup: `client --udp--> tunnel --dtls--> stunner --udp--> sink`
 func BenchmarkDTLSServer(b *testing.B) {
 	b.Run("dtls", func(b *testing.B) {
 		RunBenchmarkServer(b, "turn-dtls", 0)

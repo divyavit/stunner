@@ -22,6 +22,8 @@ dataplane using STUNner's config discovery service.
 * [RFC 6062](https://tools.ietf.org/html/rfc6062): Traversal Using Relays around NAT (TURN)
   Extensions for TCP Allocations
 * TURN transport over UDP, TCP, TLS/TCP and DTLS/UDP.
+* Plain UDP/TCP listeners that relay raw client flows to a preconfigured peer, and a tunnel
+  mode that drives them from the command line (the successor of the retired `turncat` tool).
 * TURN/UDP listener CPU scaling.
 * Two authentication modes via the long-term STUN/TURN credential mechanism: `static` using a
   static username/password pair, and `ephemeral` with dynamically generated time-scoped
@@ -35,7 +37,7 @@ dataplane using STUNner's config discovery service.
 As easy as with any Go program.
 ```console
 cd stunner
-go build -o stunnerd cmd/stunnerd/main.go
+go build -o stunnerd ./cmd/stunnerd
 ```
 
 ### Usage
@@ -110,7 +112,7 @@ A listener's `address` is the relayed transport address `stunnerd` advertises to
 
 ### TURN relay clusters
 
-A cluster with a plain protocol (`udp`, `tcp`) relays a client's traffic directly to the peers admitted by its `endpoints`. A cluster with a TURN protocol (`turn-udp`, `turn-tcp`, `turn-tls`, `turn-dtls`) instead relays the traffic through an upstream TURN server named by its `turnServer` block, which is what `turncat`'s tunnel mode does, except that `stunnerd` is the tunnel endpoint.
+A cluster with a plain protocol (`udp`, `tcp`) relays a client's traffic directly to the peers admitted by its `endpoints`. A cluster with a TURN protocol (`turn-udp`, `turn-tcp`, `turn-tls`, `turn-dtls`) instead relays the traffic through an upstream TURN server named by its `turnServer` block.
 
 ``` yaml
   clusters:
@@ -126,7 +128,42 @@ A cluster with a plain protocol (`udp`, `tcp`) relays a client's traffic directl
             password: pass
 ```
 
-The optional `auth` block tells `stunnerd` how to authenticate to the upstream server, with the exact same syntax it uses for its own clients: type `static` takes a fixed `username`/`password` pair, type `ephemeral` takes a `secret` from which a time-limited credential is generated per allocation. Omit the block for an upstream server that takes no credentials. For the `turn-tls` and `turn-dtls` transports, `insecure: true` skips the verification of the upstream server's TLS certificate.
+The optional `auth` block tells `stunnerd` how to authenticate to the upstream server, with the exact same syntax it uses for its own clients: type `static` takes a fixed `username`/`password` pair, type `ephemeral` takes a `secret` from which a time-limited credential is generated per allocation. Omit the block for an upstream server that takes no credentials. For the `turn-tls` and `turn-dtls` transports, `insecure: true` skips the verification of the upstream server's TLS certificate, and `sni` overrides the server name used for certificate verification when it differs from `address` (say, when the server is addressed by IP).
+
+### Plain listeners
+
+A listener with a plain protocol (`UDP`, `TCP`) serves raw client flows instead of TURN sessions and relays every flow to the single static peer named by its `peer_addr` field (`host:port`, the host may be a DNS name, resolved per flow). Raw flows carry no in-band peer address, which is why the peer is pinned in the listener config. The special `STDIN` protocol relays a single flow between the process stdin/stdout pair and the peer, which is what tunnel mode uses under the hood.
+
+``` yaml
+  listeners:
+    - name: plain-udp
+      protocol: UDP
+      port: 5000
+      peer_addr: "media-server.media.svc:5001"
+      flow_timeout: 5m
+      routes:
+        - media-plane
+```
+
+Peer admission is unchanged: a flow is only served if one of the listener's routed clusters admits the resolved peer address, and when the listener routes to a TURN protocol cluster the flow is relayed through the upstream TURN server (tunnel mode). Flows quiet for `flow_timeout` (default 5m) in both directions are torn down; fresh client traffic re-creates them. Note that plain listeners authenticate nobody, so they are never rendered by the Kubernetes gateway operator (the Gateway API cannot express a peer address either); they are available from static config files and the tunnel CLI only. See the [security notes](../SECURITY.md) before exposing one.
+
+## Tunnel mode
+
+The positional argument count selects `stunnerd`'s mode: no arguments run the dataplane daemon from the config origin (`-c`), a single TURN listener URI runs a standalone TURN server with a default configuration, and three arguments select tunnel mode, which tunnels a local client socket, or the stdin/stdout pair, through a TURN server to a fixed peer. Tunnel mode is the successor of the retired `turncat` utility and keeps its command line shape:
+
+```console
+stunnerd [options] <client-addr> <turn-server-addr> <peer-addr>
+```
+
+where `client-addr` is `udp://<addr>:<port>`, `tcp://<addr>:<port>`, or `-` for a stdin/stdout tunnel; `turn-server-addr` is either a TURN URI (`turn://<auth>@<addr>:<port>[?transport=udp|tcp|tls|dtls]`, the `<auth>` userinfo being a `username:password` pair for static authentication or a bare shared secret for ephemeral credentials) or the `k8s://<gateway-namespace>/<gateway-name>:<listener>` meta-URI that discovers the running config of a STUNner gateway listener from the cluster (kubeconfig flags apply); and `peer-addr` is `udp://<addr>:<port>`, `tcp://<addr>:<port>`, or the `k8s://<namespace>/<service>:<port-name-or-number>` meta-URI naming a Kubernetes Service port, resolved once at startup into the Service's cluster IP and port with the peer transport taken from the Service port spec.
+
+The below opens a local UDP tunnel endpoint at port 5000 that relays through the `udp-listener` listener of the `udp-gateway` gateway in the `stunner` namespace to a media server service, without ever looking up the service's cluster IP by hand:
+
+```console
+stunnerd udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener k8s://media/media-server:rtp
+```
+
+The `--sni` and `--insecure` flags apply to the TLS/DTLS transports (note that `--insecure` has no `-i` shorthand, which belongs to `--id`). A tunnel is quiet by default (`all:WARN`) unless a log level is set. Internally, tunnel mode renders a plain (or `STDIN`) listener pinned to the peer plus a single TURN protocol cluster naming the server, and runs the normal reconcile machinery on the result: there is no separate tunnel datapath. Logs go to stderr, so a stdin/stdout tunnel composes cleanly in shell pipelines; the process exits when the stdin flow ends.
 
 ## Performance optimization
 

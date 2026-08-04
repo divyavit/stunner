@@ -208,7 +208,7 @@ Find out more about the charts in the [STUNner-helm repository](https://github.c
 STUNner comes with a wide selection of tutorials and demos that teach you how to deploy all kinds
 of WebRTC services into Kubernetes. The first couple of tutorials present the basic concepts,
 especially the use of the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io) to configure
-STUNner and the [`turncat`](/docs/cmd/turncat.md) utility to test it. Each subsequent demo
+STUNner and the [tunnel mode of `stunnerd`](/docs/cmd/stunnerd.md#tunnel-mode) to test it. Each subsequent demo
 showcases a specific WebRTC application, from desktop streaming and video-conferencing to
 cloud-gaming, and goes from a clean Kubernetes cluster to a working and usable publicly available
 WebRTC service in 5-10 minutes using a purely declarative configuration.

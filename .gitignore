@@ -33,7 +33,6 @@ debug.test*
 go.work
 
 # Our binaries
-turncat
 stunnerctl
 stunnerd
 icetester

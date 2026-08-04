@@ -20,8 +20,8 @@ jobs:
         run: go mod download
       - name: Go install
         run: go install
-      - name: Build turncat
-        run: CGO_ENABLED=0 go build -ldflags="-w -s" -o turncat cmd/turncat/main.go
+      - name: Build stunnerd
+        run: CGO_ENABLED=0 go build -ldflags="-w -s" -o stunnerd ./cmd/stunnerd
 
       - name: Start minikube
         uses: medyagh/setup-minikube@master
@@ -68,9 +68,9 @@ jobs:
           echo "* EVERYTHING UP"
           kubectl get all -A
 
-      - name: Start turncat
+      - name: Start the tunnel
         run: |
-          ./turncat --log=all:INFO udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://$(kubectl get svc iperf-server -o jsonpath="{.spec.clusterIP}"):5001 &>turncat.log &
+          ./stunnerd --log=all:INFO udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://$(kubectl get svc iperf-server -o jsonpath="{.spec.clusterIP}"):5001 &>tunnel.log &
           sleep 1
 
       - name: Run iperf client
@@ -86,8 +86,8 @@ jobs:
           kubectl logs $(kubectl get pods -l app=iperf-server -o jsonpath='{.items[0].metadata.name}')
           echo "* MINIKUBE TUNNEL"
           cat mktunnel.log
-          echo "* TURNCAT"
-          cat turncat.log
+          echo "* TUNNEL"
+          cat tunnel.log
           echo "* STUNNER"
           kubectl logs -n stunner $(kubectl get pods -n stunner -l app=stunner -o jsonpath='{.items[0].metadata.name}')
           echo "* STUNNER-GATEWAY=OPERATOR"

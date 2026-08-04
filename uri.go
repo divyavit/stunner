@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 
-	"github.com/l7mp/stunner/v2/internal/util"
 	stnrv1 "github.com/l7mp/stunner/v2/pkg/apis/v1"
 )
 
@@ -21,19 +19,9 @@ type URI struct {
 
 // ParseURI parses a STUN/TURN server URI into its components. It accepts both the hierarchical form
 // ("turn://user:pass@host:port?transport=udp") and the RFC 7065 form ("turn:host:port?transport=udp",
-// note the single colon). IPv6 hosts must be bracketed, e.g. "turn://[2001:db8::1]:3478". The special
-// values "-" and "file://-" denote standard input.
+// note the single colon). IPv6 hosts must be bracketed, e.g. "turn://[2001:db8::1]:3478".
 func ParseURI(uri string) (*URI, error) {
 	s := URI{}
-
-	// handle stdin/out
-	if uri == "-" || uri == "file://-" {
-		s.Protocol = "file"
-		// make turncat conf happy
-		s.Port = 1
-		s.Addr = &util.FileConnAddr{File: os.Stdin}
-		return &s, nil
-	}
 
 	// RFC 7065 TURN URIs use an opaque form ("turn:host:port?...") that net/url does not split into
 	// host and port. Upgrade recognized schemes to the hierarchical "scheme://host:port?..." form so
@@ -74,14 +62,10 @@ func ParseURI(uri string) (*URI, error) {
 	// resolve into a net.Addr of the family implied by the address; net.JoinHostPort brackets IPv6
 	hostport := net.JoinHostPort(s.Address, strconv.Itoa(s.Port))
 	switch strings.ToLower(proto) {
-	case "udp", "udp4", "dtls", "turn-udp", "turn-dtls":
+	case "udp", "dtls", "turn-udp", "turn-dtls":
 		s.Addr, err = net.ResolveUDPAddr("udp", hostport)
-	case "tcp", "tcp4", "tls", "turn-tcp", "turn-tls":
+	case "tcp", "tls", "turn-tcp", "turn-tls":
 		s.Addr, err = net.ResolveTCPAddr("tcp", hostport)
-	case "ip", "ip4":
-		s.Addr, err = net.ResolveIPAddr("ip", s.Address)
-	case "unix", "unixgram", "unixpacket":
-		s.Addr, err = net.ResolveUnixAddr("unix", s.Address)
 	default:
 		return nil, fmt.Errorf("invalid protocol: %s", proto)
 	}
@@ -135,8 +119,8 @@ func (u *URI) format(sep string) string {
 // reach it. Fails on a URI whose protocol is not a TURN transport.
 //
 // Credentials come from the URI's userinfo as a "static" auth block, so a URI carrying none yields
-// a server with none. This is not the path for dynamically generated credentials (turncat mints a
-// fresh pair per client connection); those are set on the dialer config directly.
+// a server with none. This is not the path for dynamically generated credentials; those are set on
+// the dialer config directly.
 func (u *URI) TURNServer() (*stnrv1.TURNServer, stnrv1.Protocol, error) {
 	proto, err := stnrv1.NewProtocol(u.Protocol)
 	if err != nil {
@@ -164,7 +148,7 @@ func (u *URI) TURNServer() (*stnrv1.TURNServer, stnrv1.Protocol, error) {
 
 // NewURIFromListener builds a server URI from a listener configuration. The public address and port
 // are preferred over the listen address and port; a missing or placeholder address falls back to
-// "0.0.0.0". The returned URI carries no resolved net.Addr — it is meant for its string forms.
+// "0.0.0.0". The returned URI carries no resolved net.Addr, it is meant for its string forms.
 func NewURIFromListener(l *stnrv1.ListenerConfig) (*URI, error) {
 	proto, err := stnrv1.NewListenerProtocol(l.Protocol)
 	if err != nil {
@@ -211,8 +195,8 @@ func hasUnbracketedIPv6(u *url.URL) bool {
 
 // getStunnerProtoForURI derives the canonical protocol name from a parsed URI. TURN URIs
 // ("turn"/"turns" scheme) map to a TURN listener protocol via their "?transport=" query per RFC 7065;
-// any other scheme is taken as a plain transport/socket protocol (udp, tcp, unix, ip, ...) and parsed
-// directly. An empty scheme defaults to "turn".
+// any other scheme is taken as a plain transport protocol (udp, tcp, ...) and parsed directly. An
+// empty scheme defaults to "turn".
 func getStunnerProtoForURI(u *url.URL) (string, error) {
 	scheme := strings.ToLower(u.Scheme)
 	if scheme == "" {
@@ -220,7 +204,7 @@ func getStunnerProtoForURI(u *url.URL) (string, error) {
 	}
 
 	if scheme != "turn" && scheme != "turns" {
-		// plain transport/socket scheme, e.g. "udp://", "tcp://", "unix://"
+		// plain transport scheme, e.g. "udp://" or "tcp://"
 		p, err := stnrv1.NewProtocol(scheme)
 		if err != nil {
 			return "", fmt.Errorf("invalid scheme/protocol in URI %q", u.String())

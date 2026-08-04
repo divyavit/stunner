@@ -4,7 +4,7 @@ Like any conventional gateway service, an improperly configured STUNner service 
 
 ## Threat
 
-Before deploying STUNner, it is worth evaluating the potential [security risks](https://www.rtcsec.com/article/slack-webrtc-turn-compromise-and-bug-bounty) a poorly configured public STUN/TURN server poses.  To demonstrate the risks, below we shall use the [`turncat`](cmd/turncat.md) utility and `dig` to query the Kubernetes DNS service through a misconfigured STUNner gateway.
+Before deploying STUNner, it is worth evaluating the potential [security risks](https://www.rtcsec.com/article/slack-webrtc-turn-compromise-and-bug-bounty) a poorly configured public STUN/TURN server poses.  To demonstrate the risks, below we shall use the [tunnel mode of `stunnerd`](cmd/stunnerd.md#tunnel-mode) and `dig` to query the Kubernetes DNS service through a misconfigured STUNner gateway.
 
 Start with a [fresh STUNner installation](INSTALL.md) into an empty namespace called `stunner` and apply the below configuration.
 
@@ -36,13 +36,13 @@ Learn the virtual IP address (`ClusterIP`) assigned by Kubernetes to the cluster
 export KUBE_DNS_IP=$(kubectl get svc -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].spec.clusterIP}')
 ```
 
-Build `turncat`, the Swiss-army-knife [testing tool](cmd/turncat.md) for STUNner, fire up a UDP listener on `localhost:5000`, and forward all received packets to the cluster DNS service through STUNner.
+Build [`stunnerd`](cmd/stunnerd.md), fire up a tunnel with a UDP listener on `localhost:5000`, and forward all received packets to the cluster DNS service through STUNner.
 
 ```console
-./turncat --log=all:DEBUG udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://${KUBE_DNS_IP}:53
+./stunnerd --log=all:DEBUG udp://127.0.0.1:5000 k8s://stunner/udp-gateway:udp-listener udp://${KUBE_DNS_IP}:53
 ```
 
-Now, in another terminal query the Kubernetes DNS service through the `turncat` tunnel.
+Now, in another terminal query the Kubernetes DNS service through the tunnel.
 
 ```console
 dig +short @127.0.0.1 -p 5000 kubernetes.default.svc.cluster.local
@@ -94,6 +94,10 @@ For production deployments we recommend the `ephemeral` authentication mode, whi
 
 Note that STUNner can also be deployed as a STUN server without enabling the TURN protocol (only available in the premium tiers), in which case it needs no authentication. Refer to the [user guide](PREMIUM.md) for the details.
 
+### Plain listeners
+
+A [plain UDP/TCP listener](cmd/stunnerd.md#plain-listeners) relays raw client flows to its preconfigured peer with *no authentication whatsoever*: raw flows carry no credentials, so anyone who can reach the listener socket can relay traffic to the peer. An open plain listener is therefore unauthenticated open ingress to the pinned peer, subject only to the admission verdict of the listener's routed clusters, with no per-user quota and no rate limiting. This is why the Kubernetes gateway operator never renders plain listeners: they are meant for static dataplane configs and the tunnel CLI, where opening one is a deliberate act. Keep plain listeners on loopback or otherwise firewalled addresses unless the peer service is meant to be publicly reachable.
+
 ## Access control
 
 STUNner requires the user to explicitly open up external access to internal services by specifying a proper UDPRoute. For instance, the below UDPRoute allows access *only* to the `media-server` service in the `media-plane` namespace, and nothing else.
@@ -142,7 +146,7 @@ spec:
       endPort: 20000
 ```
 
-Kubernetes network policies can be easily [tested](https://banzaicloud.com/blog/network-policy) before exposing STUNner publicly; e.g., the [`turncat` utility](cmd/turncat.md) packaged with STUNner can be used conveniently for this [purpose](examples/simple-tunnel/README.md).
+Kubernetes network policies can be easily [tested](https://banzaicloud.com/blog/network-policy) before exposing STUNner publicly; e.g., the [tunnel mode of `stunnerd`](cmd/stunnerd.md#tunnel-mode) can be used conveniently for this [purpose](examples/simple-tunnel/README.md).
 
 ## Exposing internal IP addresses
 

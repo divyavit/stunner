@@ -95,7 +95,7 @@ func GenerateAuthKey(username, realm, password string) []byte {
 // "ephemeral" a time-windowed credential from the shared secret, valid for the configured
 // lifetime. A nil config and an explicit "none" both yield empty credentials, an anonymous
 // session. This is the client-side counterpart of the AuthHandler: everywhere STUNner dials an
-// upstream TURN server (a TURN-* relay cluster, turncat), the credentials come from here.
+// upstream TURN server (a TURN-* relay cluster), the credentials come from here.
 func GenerateCredentials(auth *stnrv1.AuthConfig) (string, string, error) {
 	if auth == nil {
 		return "", "", nil

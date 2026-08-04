@@ -48,7 +48,7 @@ case "${LOCAL_ARCH}" in
 esac
 
 # Download binaries
-progs="stunnerctl turncat"
+progs="stunnerctl"
 tmp=$(mktemp -d /tmp/stunner.XXXXXX)
 
 for prog in $progs; do

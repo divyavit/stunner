@@ -18,7 +18,7 @@ Building from source is as easy as it usually gets with Go:
 
 ```console
 cd stunner
-go build -o turncat cmd/icetester/main.go
+go build -o icetester ./cmd/icetester
 ```
 
 The containerized version is available as `docker.io/l7mp/icester`.

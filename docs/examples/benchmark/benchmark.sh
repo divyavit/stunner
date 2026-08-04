@@ -11,7 +11,7 @@ usage="$(basename "$0") [-h] [-np n] [-t n] [-ps n] [-bw n] [-pl local|k8s]   --
 
 where:
     -h      Show help text
-    -n      Number of 'turncat' clients (more of them can be used, 
+    -n      Number of tunnel clients (more of them can be used, 
             this way each client will forward lesser traffic and 
             none of them becomes the bottleneck while measuring) [Default: 1]
     -t      Time in seconds to transmit for [Default: 10]
@@ -58,10 +58,10 @@ while getopts ":hn:t:s:b:p:" option; do
 done
 shift $((OPTIND - 1))
 
-echo "Number of concurrent turncat clients: $num_of_processes"
+echo "Number of concurrent tunnel clients: $num_of_processes"
 echo "Evaluation time: $eval_time sec"
 echo "Packet size: $packet_size bytes"
-echo "Bandwidth: $((bandwidth / 1000)) Kbits/sec or $((bandwidth / 1000 / 1000)) Mbits/sec per turncat client"
+echo "Bandwidth: $((bandwidth / 1000)) Kbits/sec or $((bandwidth / 1000 / 1000)) Mbits/sec per tunnel client"
 echo "Platform: $platform"
 
 if [[ $platform == "local" ]]; then
@@ -92,7 +92,7 @@ fi
 for i in $(seq "$num_of_processes"); 
 do
     port=$((8999+i))
-    go run ../../../cmd/turncat/main.go --log=all:INFO udp://127.0.0.1:$port \
+    go run ../../../cmd/stunnerd --log=all:INFO udp://127.0.0.1:$port \
         k8s://stunner/udp-gateway:udp-listener udp://"${UDP_ECHO_IP}":$IPERF_PORT >/dev/null 2>&1 &
 done
 

@@ -5,7 +5,7 @@ This tutorial shows how to tunnel an external connection via STUNner to a UDP se
 In this tutorial you will learn how to:
 * configure a UDP service in Kubernetes,
 * configure STUNner to expose the service to clients,
-* use [`turncat`](../../cmd/turncat.md) to connect to the UDP service via STUNner,
+* use the [tunnel mode of `stunnerd`](../../cmd/stunnerd.md#tunnel-mode) to connect to the UDP service via STUNner,
 * benchmark your cloud-setup with [`iperfv2`](https://iperf.fr).
 
 ## Prerequisites
@@ -220,25 +220,25 @@ export PEER_IP=$(kubectl get svc media-plane -o jsonpath='{.spec.clusterIP}')
 ```
 
 We also need a STUN/TURN client to actually initiate a connection. STUNner comes with a handy
-STUN/TURN client called [`turncat`](/docs/cmd/turncat.md) for this purpose. Once
-[installed](/cmd/turncat/README.md#installation), you can fire up `turncat` to listen on the
+STUN/TURN client, the [tunnel mode of `stunnerd`](/docs/cmd/stunnerd.md#tunnel-mode), for this
+purpose. Once installed, you can fire up a tunnel to listen on the
 standard input and send everything it receives to STUNner. Type any input and press Enter, and you
 should see a nice greeting from your cluster!
 
 ```console
-./turncat - k8s://stunner/udp-gateway:udp-listener udp://${PEER_IP}:9001
+./stunnerd - k8s://stunner/udp-gateway:udp-listener udp://${PEER_IP}:9001
 Hello STUNner
 Greetings from STUNner!
 ```
 
-Note that we haven't specified the public IP address and port: `turncat` is clever enough to parse
+Note that we haven't specified the public IP address and port: the tunnel is clever enough to parse
 the running [STUNner configuration](#check-your-config) from Kubernetes directly. Just specify the
 special STUNner URI `k8s://stunner/udp-gateway:udp-listener`, using the namespace (`stunner` here)
 and the name of the Gateway (`udp-gateway`) plus the listener you want to connect to
-(`udp-listener`), and `turncat` will do the heavy lifting.
+(`udp-listener`), and `stunnerd` will do the heavy lifting.
 
-Note that your actual WebRTC clients will *not* need to use `turncat` to reach the cluster: all
-modern Web browsers and WebRTC clients come with a STUN/TURN client built in. Here, `turncat` is
+Note that your actual WebRTC clients will *not* need a tunnel to reach the cluster: all
+modern Web browsers and WebRTC clients come with a STUN/TURN client built in. Here, the tunnel is
 used only to *simulate* what a real WebRTC client would do when trying to reach STUNner.
 
 ## Reconcile
@@ -308,27 +308,27 @@ instead of creating a *new* one, here we just use the simpler approach for brevi
    EOF
    ```
 
-1. Fire up `turncat` again, but this time let it connect through TLS. This is achieved by
+1. Fire up the tunnel again, but this time let it connect through TLS. This is achieved by
    specifying the name of the TLS listener (`tls-listener`) in the STUNner URI. The `-i` command
-   line argument (`--insecure`) is added to prevent `turncat` from rejecting our insecure
+   line argument (`--insecure`) is added to prevent the TURN client from rejecting our insecure
    self-signed TLS certificate; this will not be needed when using a real signed certificate.
 
    ```console
-   ./turncat -i -l all:INFO - k8s://stunner/tls-gateway:tls-listener udp://${PEER_IP}:9001
-   [...] turncat INFO: Turncat client listening on -, TURN server: tls://10.96.55.200:443, peer: udp://10.104.175.57:9001
+   ./stunnerd --insecure -l all:INFO - k8s://stunner/tls-gateway:tls-listener udp://${PEER_IP}:9001
+   [...] tunnel-cli INFO: tunnel running: - -> k8s://stunner/tls-gateway:tls-listener -> udp://10.104.175.57:9001
    [...]
    Hello STUNner
    Greetings from STUNner!
    ```
 
-   We have set the `turncat` loglevel to INFO to learn that this time `turncat` has connected via
+   We have set the loglevel to INFO to learn that this time the tunnel has connected via
    the TURN server `tls://10.96.55.200:443`. And that's it: STUNner automatically routes the
    incoming TLS/TCP connection to the UDP greeter service, silently converting from TLS/TCP to UDP
    in the background and back again on return.
 
 ## Cleaning up
 
-Stop `turncat` and wipe all Kubernetes configuration.
+Stop the tunnel and wipe all Kubernetes configuration.
 
 ```console
 kubectl delete -f https://raw.githubusercontent.com/l7mp/stunner/refs/heads/main/docs/examples/udp-echo/udp-greeter.yaml
