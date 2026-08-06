@@ -4,17 +4,17 @@
 #
 #    pip-compile docs/requirements.in
 #
-click==8.4.0
+click==8.4.2
     # via mkdocs
 ghp-import==2.1.0
     # via mkdocs
-griffelib==2.0.2
+griffelib==2.1.0
     # via mkdocstrings-python
 jinja2==3.1.6
     # via
     #   mkdocs
     #   mkdocstrings
-markdown==3.10.2
+markdown==3.10.3
     # via
     #   markdown-gfm-admonition
     #   markdown-include
@@ -47,19 +47,19 @@ mkdocs-autorefs==1.4.4
     #   mkdocstrings-python
 mkdocs-get-deps==0.2.2
     # via mkdocs
-mkdocstrings[python]==1.0.4
+mkdocstrings[python]==1.0.6
     # via
     #   -r docs/requirements.in
     #   mkdocstrings-python
-mkdocstrings-python==2.0.3
+mkdocstrings-python==2.0.5
     # via mkdocstrings
-packaging==26.2
+packaging==26.3
     # via mkdocs
 pathspec==1.1.1
     # via mkdocs
-platformdirs==4.9.6
+platformdirs==4.11.0
     # via mkdocs-get-deps
-pymdown-extensions==10.21.3
+pymdown-extensions==11.0.1
     # via mkdocstrings
 python-dateutil==2.9.0.post0
     # via ghp-import
