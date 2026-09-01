@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 
 	"github.com/l7mp/stunner/internal/object"
 	"github.com/l7mp/stunner/internal/util"
@@ -224,6 +226,7 @@ func (s *Stunner) NewEventHandler(l *object.Listener) turn.EventHandler {
 			s.log.Debugf("Authentication request: client=%s, method=%s, verdict=%s",
 				dumpClient(src, dst, proto, username, realm), method, status)
 		},
+		InitialPermissions: s.NewInitialPermissionsHandler(l),
 		OnAllocationCreated: func(src, dst net.Addr, proto, username, realm string, relayAddr net.Addr, reqPort int) {
 			s.log.Debugf("Allocation created: client=%s, relay-address=%s, requested-port=%d",
 				dumpClient(src, dst, proto, username, realm), relayAddr.String(), reqPort)
@@ -285,4 +288,51 @@ func (s *Stunner) NewEventHandler(l *object.Listener) turn.EventHandler {
 func dumpClient(srcAddr, dstAddr net.Addr, protocol, username, realm string) string {
 	return fmt.Sprintf("%s-%s:%s, username=%s, realm=%s", srcAddr.String(), dstAddr.String(),
 		protocol, username, realm)
+}
+
+// PreauthorizePeersEnvVar names the environment variable that enables pre-authorizing the peers
+// reachable via a listener's routes at allocation time. Off unless set to a true value.
+const PreauthorizePeersEnvVar = "STUNNER_PREAUTHORIZE_ROUTED_PEERS"
+
+// NewInitialPermissionsHandler returns a callback that installs a TURN permission for every peer
+// reachable via the listener's routes as soon as an allocation is created, instead of waiting for
+// the client to send CreatePermission.
+//
+// This deviates from RFC 5766, which requires the client to request each permission explicitly, so
+// it is off unless PreauthorizePeersEnvVar is set. It exists for asymmetric-ICE deployments in
+// which the peer (an SFU behind a UDPRoute) starts sending connectivity checks at the relay
+// address immediately, and would otherwise be dropped until the client's CreatePermission lands.
+//
+// The set of peers pre-authorized here is a subset of what NewPermissionHandler would admit for
+// the same listener anyway, so this grants no reach that an authenticated client could not obtain
+// one round trip later. Endpoints spanning a prefix wider than a single host are skipped: they
+// cannot be enumerated, and pre-authorizing a whole range would turn the relay into a reflector.
+// The permissions are installed with a short lifetime and lapse unless the client refreshes them.
+func (s *Stunner) NewInitialPermissionsHandler(l *object.Listener) func(src, dst net.Addr, proto, username, realm string) []net.IP {
+	s.log.Trace("NewInitialPermissionsHandler")
+
+	if enabled, err := strconv.ParseBool(os.Getenv(PreauthorizePeersEnvVar)); err != nil || !enabled {
+		return nil
+	}
+
+	return func(src, dst net.Addr, proto, username, realm string) []net.IP {
+		peers := []net.IP{}
+
+		clusters := s.clusterManager.Keys()
+		for _, r := range l.Routes {
+			if !util.Member(clusters, r) {
+				continue
+			}
+
+			c := s.GetCluster(r)
+			peers = append(peers, c.HostRoutes()...)
+		}
+
+		if len(peers) > 0 {
+			s.log.Debugf("pre-authorizing %d peer(s) on listener %q for client %s: %v",
+				len(peers), l.Name, dumpClient(src, dst, proto, username, realm), peers)
+		}
+
+		return peers
+	}
 }

@@ -104,3 +104,16 @@ func (ep *Endpoint) String() string {
 
 	return ip + portRange
 }
+
+// HostIP returns the address of the endpoint plus true if the endpoint denotes a single host (a
+// /32 for IPv4 or a /128 for IPv6), and false otherwise. Wider prefixes cannot be enumerated into
+// individual peer addresses. Ports are ignored, mirroring Cluster.Route, which matches on the IP
+// address alone.
+func (e *Endpoint) HostIP() (net.IP, bool) {
+	ones, bits := e.prefix.Mask.Size()
+	if bits == 0 || ones != bits {
+		return nil, false
+	}
+
+	return e.prefix.IP, true
+}

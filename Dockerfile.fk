@@ -1,0 +1,46 @@
+###########
+# stunnerd carrying the pre-authorized-permissions patch.
+#
+# go.mod has `replace github.com/pion/turn/v5 => ../pion-turn`, so the build context must be the
+# directory holding BOTH repos, not this one:
+#
+#   docker build -f stunnerd/Dockerfile.fk \
+#     --build-arg VERSION=1.2.1-fk-1 --build-arg COMMIT_HASH=$(git -C stunnerd rev-parse --short HEAD) \
+#     -t jfrog.fkinternal.com/n200m-icap/stunnerd:1.2.1-fk-1 \
+#     ~/icap/stunner
+#
+# Kept separate from the upstream Dockerfile so rebases onto l7mp/stunner stay clean.
+FROM --platform=linux/amd64 jfrog.fkinternal.com/fk-base-images/golang:1.26.0-debian13.3 AS builder
+
+ENV GOPROXY=https://artifactory.artifactory-prod.fkcloud.in/artifactory/api/go/go_virtual \
+    GOSUMDB=off
+
+WORKDIR /workspace
+COPY pion-turn/ pion-turn/
+COPY stunnerd/go.mod stunnerd/go.sum stunnerd/
+
+WORKDIR /workspace/stunnerd
+RUN go mod download
+
+COPY stunnerd/*.go ./
+COPY stunnerd/internal/ internal/
+COPY stunnerd/pkg/ pkg/
+COPY stunnerd/cmd/ cmd/
+
+ARG VERSION=dev
+ARG COMMIT_HASH=unknown
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+    -ldflags "-s -w -X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=$(date +%FT%T%z)" \
+    -o bin/stunnerd cmd/stunnerd/main.go
+
+###########
+FROM --platform=linux/amd64 jfrog.fkinternal.com/appsec.local/distroless-static-debian:nonroot
+
+COPY --from=builder /workspace/stunnerd/bin/stunnerd /usr/bin/stunnerd
+COPY --from=builder /workspace/stunnerd/cmd/stunnerd/stunnerd.conf /stunnerd.conf
+USER 65532:65532
+
+EXPOSE 3478/udp
+
+ENTRYPOINT ["/usr/bin/stunnerd"]
+CMD ["-c", "/stunnerd.conf"]

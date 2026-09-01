@@ -246,3 +246,31 @@ func (f *ClusterFactory) New(conf stnrv1.Config) (Object, error) {
 
 	return NewCluster(conf, f.resolver, f.offloadStatsHandler, f.logger)
 }
+
+// HostRoutes returns the individual peer addresses reachable via the cluster. Only single-host
+// routes are reported: a STATIC endpoint spanning a wider prefix is skipped, since it cannot be
+// enumerated. The result is a subset of the addresses that Route would admit, never a superset.
+func (c *Cluster) HostRoutes() []net.IP {
+	ips := []net.IP{}
+
+	switch c.Type {
+	case stnrv1.ClusterTypeStatic:
+		for _, e := range c.Endpoints {
+			if ip, ok := e.HostIP(); ok {
+				ips = append(ips, ip)
+			}
+		}
+
+	case stnrv1.ClusterTypeStrictDNS:
+		for _, d := range c.Domains {
+			hs, err := c.Resolver.Lookup(d)
+			if err != nil {
+				c.log.Infof("could not resolve domain %q: %s", d, err.Error())
+				continue
+			}
+			ips = append(ips, hs...)
+		}
+	}
+
+	return ips
+}
