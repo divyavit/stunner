@@ -243,14 +243,6 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 	if m.EventHandler.InitialPermissions != nil {
 		for _, peerIP := range m.EventHandler.InitialPermissions(fiveTuple.SrcAddr,
 			fiveTuple.DstAddr, fiveTuple.Protocol.String(), userID, realm) {
-			alloc.AddPermission(NewPermission(&net.UDPAddr{IP: peerIP},
-				m.log, DefaultPermissionTimeout))
-		}
-	}
-
-	if m.EventHandler.InitialPermissions != nil {
-		for _, peerIP := range m.EventHandler.InitialPermissions(fiveTuple.SrcAddr,
-			fiveTuple.DstAddr, fiveTuple.Protocol.String(), userID, realm) {
 			alloc.AddPermission(NewPermission(&net.UDPAddr{IP: peerIP}, m.log, DefaultInitialPermissionTimeout))
 		}
 	}
