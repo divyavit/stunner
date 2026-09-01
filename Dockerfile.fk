@@ -1,10 +1,9 @@
 ###########
 # stunnerd carrying the pre-authorized-permissions patch.
 #
-# The patched pion/turn is vendored as a submodule at third_party/pion-turn and wired in via a
-# replace directive, so this builds from the repo root like any other Go project:
+# The patched pion/turn is vendored as plain source at third_party/pion-turn and wired in via a
+# replace directive, so a bare clone builds with no extra checkout steps:
 #
-#   git submodule update --init
 #   docker build -f Dockerfile.fk \
 #     --build-arg VERSION=1.2.1-fk-1 --build-arg COMMIT_HASH=$(git rev-parse --short HEAD) \
 #     -t jfrog.fkinternal.com/n200m-icap/stunnerd:1.2.1-fk-1 .
