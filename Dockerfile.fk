@@ -1,13 +1,13 @@
 ###########
 # stunnerd carrying the pre-authorized-permissions patch.
 #
-# go.mod has `replace github.com/pion/turn/v5 => ../pion-turn`, so the build context must be the
-# directory holding BOTH repos, not this one:
+# The patched pion/turn is vendored as a submodule at third_party/pion-turn and wired in via a
+# replace directive, so this builds from the repo root like any other Go project:
 #
-#   docker build -f stunnerd/Dockerfile.fk \
-#     --build-arg VERSION=1.2.1-fk-1 --build-arg COMMIT_HASH=$(git -C stunnerd rev-parse --short HEAD) \
-#     -t jfrog.fkinternal.com/n200m-icap/stunnerd:1.2.1-fk-1 \
-#     ~/icap/stunner
+#   git submodule update --init
+#   docker build -f Dockerfile.fk \
+#     --build-arg VERSION=1.2.1-fk-1 --build-arg COMMIT_HASH=$(git rev-parse --short HEAD) \
+#     -t jfrog.fkinternal.com/n200m-icap/stunnerd:1.2.1-fk-1 .
 #
 # Kept separate from the upstream Dockerfile so rebases onto l7mp/stunner stay clean.
 FROM --platform=linux/amd64 jfrog.fkinternal.com/fk-base-images/golang:1.26.0-debian13.3 AS builder
@@ -16,16 +16,14 @@ ENV GOPROXY=https://artifactory.artifactory-prod.fkcloud.in/artifactory/api/go/g
     GOSUMDB=off
 
 WORKDIR /workspace
-COPY pion-turn/ pion-turn/
-COPY stunnerd/go.mod stunnerd/go.sum stunnerd/
-
-WORKDIR /workspace/stunnerd
+COPY third_party/pion-turn/ third_party/pion-turn/
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY stunnerd/*.go ./
-COPY stunnerd/internal/ internal/
-COPY stunnerd/pkg/ pkg/
-COPY stunnerd/cmd/ cmd/
+COPY *.go ./
+COPY internal/ internal/
+COPY pkg/ pkg/
+COPY cmd/ cmd/
 
 ARG VERSION=dev
 ARG COMMIT_HASH=unknown
@@ -36,8 +34,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
 ###########
 FROM --platform=linux/amd64 jfrog.fkinternal.com/appsec.local/distroless-static-debian:nonroot
 
-COPY --from=builder /workspace/stunnerd/bin/stunnerd /usr/bin/stunnerd
-COPY --from=builder /workspace/stunnerd/cmd/stunnerd/stunnerd.conf /stunnerd.conf
+COPY --from=builder /workspace/bin/stunnerd /usr/bin/stunnerd
+COPY --from=builder /workspace/cmd/stunnerd/stunnerd.conf /stunnerd.conf
 USER 65532:65532
 
 EXPOSE 3478/udp

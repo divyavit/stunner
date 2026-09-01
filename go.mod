@@ -124,4 +124,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )
 
-replace github.com/pion/turn/v5 => ../pion-turn
+replace github.com/pion/turn/v5 => ./third_party/pion-turn
